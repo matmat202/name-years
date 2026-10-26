@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Name Years · every US first name, every year since 1880</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%235b3fa8'/%3E%3Cpath d='M5 25c4 0 5-14 9-14s4 9 7 9 3-12 6-12' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#5b3fa8">
+<meta name="description" content="Type a first name and see how many US babies were given it every year since 1880, when it peaked, its rank today, and when half of everyone with it was born. From Social Security records.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://matmat202.github.io/name-years/">
+<meta property="og:title" content="Name Years">
+<meta property="og:description" content="Every US first name, every year since 1880. When did yours peak?">
+<meta name="twitter:card" content="summary">
+<style>
+:root{color-scheme:light;--ground:#f8f8fa;--card:#fff;--ink:#1c1b22;--ink-2:#55535f;--ink-3:#686673;
+  --line:#e2e1e8;--grid:#ecebf0;--accent:#5b3fa8;
+  --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;
+  --f-ui:system-ui,-apple-system,"Segoe UI",sans-serif}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--ground:#141318;--card:#1e1d24;--ink:#ecebf2;
+  --ink-2:#b1afbd;--ink-3:#9d9baa;--line:#33313c;--grid:#2a2932;--accent:#b9a6f0;
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--f-ui);font-size:15px}
+main{max-width:900px;margin:0 auto;padding:16px}
+h1{font-size:24px;margin:4px 0 2px}h1 span{color:var(--accent)}
+.sub{color:var(--ink-2);font-size:13px;margin:0 0 14px;line-height:1.45}
+a{color:var(--accent)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+form{display:flex;gap:8px;position:relative}
+form .box{flex:1;min-width:0;position:relative}
+form input{width:100%;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)}
+form button{font:inherit;font-weight:600;padding:10px 16px;border:0;border-radius:10px;background:var(--accent);color:var(--card);cursor:pointer}
+label.v{position:absolute;left:-9999px}
+.opts{position:absolute;z-index:5;left:0;right:0;top:calc(100% + 4px);margin:0;padding:4px;list-style:none;background:var(--card);
+  border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.18);max-height:300px;overflow:auto}
+.opts li{padding:8px 10px;border-radius:7px;cursor:pointer;display:flex;justify-content:space-between;gap:10px}
+.opts li .n{color:var(--ink-2);font-size:12px;font-variant-numeric:tabular-nums}
+.opts li[aria-selected="true"],.opts li:hover{background:var(--ground);color:var(--accent)}
+.presets{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:10px 0 0;padding:0;font-size:13px;color:var(--ink-2);align-items:center}
+.presets b{font-weight:600;color:var(--ink-2);margin-right:2px}
+.presets button{font:inherit;font-size:13px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer}
+.presets button:hover{border-color:var(--accent);color:var(--accent)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:14px 0 8px;flex-wrap:wrap}
+.status{font-size:13px;color:var(--ink-2);min-height:1.3em;margin:0}
+.status.err{color:var(--ink)}
+.units{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--card)}
+.units button{font:inherit;font-size:13px;padding:6px 12px;border:0;background:none;color:var(--ink-2);cursor:pointer}
+.units button[aria-pressed="true"]{background:var(--accent);color:var(--card);font-weight:600}
+.units button:focus-visible{outline-offset:-4px}
+.units button[aria-pressed="true"]:focus-visible{outline-color:var(--card)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 10px 8px;position:relative}
+#chart{position:relative}
+#chart svg{display:block;width:100%;height:auto;touch-action:manipulation}
+.ax text,.lab{font-size:11px;fill:var(--ink-2)}
+.lab{font-weight:600;fill:var(--ink)}
+.ax line{stroke:var(--grid);stroke-width:1}
+.ax .base{stroke:var(--ink-3)}
+.ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.dot{stroke:var(--card);stroke-width:2}
+.cross{stroke:var(--ink-3);stroke-width:1;stroke-dasharray:3 3}
+.tip{position:absolute;top:8px;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.14);display:none;min-width:170px}
+.tip.on{display:block}
+.tip h3{margin:0 0 4px;font-size:13px}
+.tip table{border-collapse:collapse}.tip td{padding:1px 4px}.tip td.v{text-align:right;font-variant-numeric:tabular-nums}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.yl{font-size:11px;color:var(--ink-3);margin:2px 4px 0}
+ul.facts{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+ul.facts li{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+ul.facts h2{font-size:16px;margin:0 0 6px;display:flex;align-items:center}
+ul.facts dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:13px}
+ul.facts dt{color:var(--ink-2)}ul.facts dd{margin:0;font-variant-numeric:tabular-nums}
+details{margin:14px 0 0}
+summary{cursor:pointer;font-size:13px;color:var(--ink-2)}
+.tbl{max-height:420px;overflow:auto}
+.tbl table{border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;margin-top:6px;width:100%}
+.tbl th,.tbl td{padding:3px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+footer{font-size:12px;color:var(--ink-2);line-height:1.5;margin:18px 2px 8px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Name <span>Years</span></h1>
+  <p class="sub" id="sub">How many babies in the US were given a first name, every year since 1880, from the Social Security Administration's count of every name given to five or more babies.</p>
+
+  <form id="form" autocomplete="off">
+    <div class="box"><label class="v" for="q">Names</label>
+      <input id="q" type="search" spellcheck="false" placeholder="Type a name, or a few: Olivia, Emma"
+        role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="opts">
+      <ul id="opts" class="opts" role="listbox" aria-label="Names" hidden></ul></div>
+    <button type="submit">Show</button>
+  </form>
+  <ul class="presets" id="presets"></ul>
+
+  <div class="row">
+    <p class="status" id="status" aria-live="polite"></p>
+    <div class="units" id="units" role="group" aria-label="Chart units">
+      <button type="button" data-u="rate" aria-pressed="true">Per 1,000 babies</button>
+      <button type="button" data-u="n" aria-pressed="false">Babies</button>
+    </div>
+  </div>
+
+  <section class="card" aria-label="Chart">
+    <div id="chart"></div>
+    <p class="yl" id="yl"></p>
+  </section>
+  <ul class="facts" id="facts"></ul>
+
+  <details>
+    <summary>Every year, as a table</summary>
+    <div class="tbl" id="table"></div>
+  </details>
+
+  <footer>Data: the US <a href="https://www.ssa.gov/oact/babynames/limits.html">Social Security Administration</a>'s
+    national baby names file (public domain), births <span id="span">1880–2025</span>, taken from the
+    <a href="https://web.archive.org/web/2026/https://www.ssa.gov/oact/babynames/names.zip">Internet Archive's copy</a> of it.
+    It counts Social Security card applications by sex at birth, so it is US-born only, thin before 1937 (when cards
+    began), and silent on any name given to fewer than five babies of a sex in a year: a line that drops to zero may
+    mean four. “Per 1,000” is per 1,000 babies of the same sex born that year, so a boom year does not look like a
+    fashion. “Half born by” is of everyone ever given the name, not of those alive today. A name that is a real
+    share of both sexes gets a line for each. Built by Claude for <a href="https://matmat202.github.io/">matmat202</a>.</footer>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>
