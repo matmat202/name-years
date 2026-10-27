@@ -78,6 +78,28 @@ export function medianYear(counts, y0) {
   return null;
 }
 
+// The babies of each year still alive on 1 January of `asof` (an estimate: births times
+// the SSA cohort life table's share alive, migration left out). `alive` is per year from y0.
+export const livingCounts = (counts, alive) => counts.map((c, i) => c * (alive[i] ?? 0));
+
+// Of those still alive: how many, the year by which half of them were born, and the age
+// someone born that year turns during `asof`.
+export function living(counts, alive, y0, asof) {
+  const live = livingCounts(counts, alive);
+  const n = live.reduce((a, b) => a + b, 0);
+  const total = counts.reduce((a, b) => a + b, 0);
+  const med = n >= 0.5 ? medianYear(live, y0) : null;
+  return { n, share: total ? n / total : 0, median: med, age: med == null ? null : asof - med };
+}
+
+// 212,345 -> "about 212,000"; small numbers stay exact enough to be honest.
+export function fmtAbout(n) {
+  if (n < 0.5) return 'none';
+  if (n < 100) return `about ${Math.round(n)}`;
+  const mag = 10 ** (Math.floor(Math.log10(n)) - 1);
+  return `about ${fmtInt(Math.round(n / mag) * mag)}`;
+}
+
 // The lines one name contributes: each sex with at least MIN_SEX_SHARE of its babies,
 // larger first.
 export function seriesFor(name, rec, meta) {

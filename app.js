@@ -1,6 +1,6 @@
 import {
   MAX_SERIES, shardKey, parseNames, lookup, prefixMatches, totalOf, seriesFor, seriesLabel,
-  peak, medianYear, niceTicks, fmtInt, fmtRate, rankLabel, encodeState, decodeState, SEX_WORD,
+  peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, encodeState, decodeState, SEX_WORD,
 } from './names-logic.js';
 
 const $ = (id) => document.getElementById(id);
@@ -179,12 +179,15 @@ function drawFacts() {
     const pn = peak(s.counts);
     const last = s.counts.length - 1;
     const med = medianYear(s.counts, META.y0);
+    const lv = living(s.counts, META.alive[s.sex], META.y0, META.asof);
     const rows = [
       [`${META.y1}`, s.counts[last] ? `${fmtInt(s.counts[last])} ${SEX_WORD[s.sex]}, ${rankLabel(s.rank[0])}` : `fewer than 5 ${SEX_WORD[s.sex]}`],
       ['Most popular', p == null ? '—' : `${META.y0 + p}: ${fmtRate(s.rate[p])} per 1,000 ${SEX_WORD[s.sex]}`],
       ['Most babies', pn == null ? '—' : `${META.y0 + pn}: ${fmtInt(s.counts[pn])}`],
       ['Best rank', s.rank[1] ? `${rankLabel(s.rank[1])}, first in ${s.rank[2]}` : '—'],
-      ['Half born by', med == null ? '—' : String(med)],
+      ['Half of all born by', med == null ? '—' : String(med)],
+      [`Alive in ${META.asof}`, lv.n < 0.5 ? 'none, by the life tables' : `${fmtAbout(lv.n)} (${Math.round(100 * lv.share)}% of all)`],
+      ['Half of those alive born by', lv.median == null ? '—' : `${lv.median}: they turn ${lv.age} in ${META.asof}`],
       ['Since 1880', `${fmtInt(s.total)} ${SEX_WORD[s.sex]}`],
     ];
     for (const [k, v] of rows) {

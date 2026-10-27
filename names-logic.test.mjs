@@ -1,6 +1,6 @@
 // node site/names-logic.test.mjs — the page's pure logic, plus the shipped data checked
 // against facts read straight out of the SSA file. Exit 1 on any failure.
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as L from './names-logic.js';
 
@@ -35,6 +35,16 @@ eq('no peak in all zeros', L.peak([0, 0]), null);
 eq('median year: half of the babies by then', L.medianYear([1, 1, 1, 1, 6], 2000), 2004);
 eq('median year with an even split takes the earlier', L.medianYear([5, 5], 2000), 2000);
 eq('median of nothing is null', L.medianYear([0, 0], 2000), null);
+eq('living counts weight each year by its share alive', L.livingCounts([100, 100, 100], [0, 0.5, 1]), [0, 50, 100]);
+{
+  // 300 born 2000-2002; alive 0, 50, 100: half of the 150 living (75) is only reached in 2002.
+  const v = L.living([100, 100, 100], [0, 0.5, 1], 2000, 2026);
+  eq('living: how many, share, half born by, age that year', [v.n, +v.share.toFixed(4), v.median, v.age], [150, 0.5, 2002, 24]);
+  // Positive control: with everyone alive it is the births median; skewing deaths early moves it later.
+  eq('everyone alive: the living median is the births median', L.living([1, 1, 1, 1, 6], [1, 1, 1, 1, 1], 2000, 2026).median, L.medianYear([1, 1, 1, 1, 6], 2000));
+  eq('nobody alive: no median, no age', [L.living([5, 5], [0, 0], 2000, 2026).median, L.living([5, 5], [0, 0], 2000, 2026).age], [null, null]);
+}
+eq('about-numbers', [0.2, 7.4, 212345, 1049, 99.6].map(L.fmtAbout), ['none', 'about 7', 'about 210,000', 'about 1,000', 'about 100']);
 {
   const s = L.seriesFor('Jordan', shard.Jordan, meta);
   eq('a unisex name gives two lines, the bigger first', s.map((x) => x.sex), ['M', 'F']);
@@ -89,6 +99,33 @@ eq('Mary was #1 for girls in 1880 (its best rank, first reached then)', get('Mar
   // Positive control on the 5% rule: Mary has boys in the file (a few thousand), but far
   // under 5% of a name of four million, so it is one line.
   ok('Mary has boys in the file yet draws one line', get('Mary').M && L.seriesFor('Mary', get('Mary'), M).length === 1);
+}
+{
+  // The survival shares against the raw SSA cohort tables, read here without build.py:
+  // a cohort is midway between l(a-1) and l(a), a = asof - year, per 100,000 born.
+  // Only in the source tree, where the tables are (the published copy has the shares alone).
+  const { gunzipSync } = await import('node:zlib');
+  const tree = existsSync(here + '../data/life_F.csv.gz') && existsSync(here + '../build.py');
+  const raw = {};
+  if (tree) for (const sex of ['F', 'M']) {
+    raw[sex] = new Map();
+    for (const line of gunzipSync(readFileSync(here + `../data/life_${sex}.csv.gz`)).toString().split('\n')) {
+      const c = line.split(',');
+      if (/^\d{4}$/.test(c[0]) && /^\d+$/.test(c[1])) raw[sex].set(`${c[0]} ${c[1]}`, +c[3]);
+    }
+  }
+  const want = (sex, y) => { const a = M.asof - y; return ((a === 1 ? 100000 : raw[sex].get(`${y} ${a - 1}`) ?? 0) + (raw[sex].get(`${y} ${a}`) ?? 0)) / 2e5; };
+  eq('alive as of the year after the data ends', M.asof, M.y1 + 1);
+  const bad = !tree ? [] : ['F', 'M'].flatMap((sex) => M.alive[sex].map((v, i) => (Math.abs(v - want(sex, M.y0 + i)) < 6e-5 ? null : `${sex} ${M.y0 + i}: ${v} vs ${want(sex, M.y0 + i)}`))).filter(Boolean);
+  ok('every year\'s share alive matches the raw life table', !bad.length && M.alive.F.length === M.y1 - M.y0 + 1, bad.slice(0, 3).join('; '));
+  eq('nobody born before 1900 is alive (the tables start there, and they would be 126)', M.alive.F.slice(0, 1900 - M.y0 + 1).every((v) => v === 0), true);
+  ok('women outlive men born the same year (1950)', M.alive.F[1950 - M.y0] > M.alive.M[1950 - M.y0]);
+  // Facts from state/scratch/name-alive/lever.py, an independent pass over names.zip and the tables.
+  const lv = (n, sex) => { const s = L.seriesFor(n, get(n), M).find((x) => x.sex === sex); return L.living(s.counts, M.alive[sex], M.y0, M.asof); };
+  eq('Mildred: half of all born by 1922, half of the living by 1948', [L.medianYear(L.seriesFor('Mildred', get('Mildred'), M)[0].counts, M.y0), lv('Mildred', 'F').median], [1922, 1948]);
+  eq('Margaret, Gertrude, John living medians', [lv('Margaret', 'F').median, lv('Gertrude', 'F').median, lv('John', 'M').median], [1958, 1946, 1967]);
+  eq('a young name barely moves: Liam 2017, Brittany 1991', [lv('Liam', 'M').median, lv('Brittany', 'F').median], [2017, 1991]);
+  eq('Gertrude: 8% of all ever given it are alive', Math.round(100 * lv('Gertrude', 'F').share), 8);
 }
 ok('rising names grew from 50+ to 300+', ['F', 'M'].every((s) => M.rising[s].length && M.rising[s].every(([, now, then]) => now >= 300 && then >= 50 && now > then)));
 ok('the biggest shard stays under 1 MB', Math.max(...files.map((f) => readFileSync(here + 'data/n/' + f).length)) < 1e6);

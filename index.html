@@ -6,7 +6,7 @@
 <title>Name Years · every US first name, every year since 1880</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%235b3fa8'/%3E%3Cpath d='M5 25c4 0 5-14 9-14s4 9 7 9 3-12 6-12' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <meta name="theme-color" content="#5b3fa8">
-<meta name="description" content="Type a first name and see how many US babies were given it every year since 1880, when it peaked, its rank today, and when half of everyone with it was born. From Social Security records.">
+<meta name="description" content="Type a first name and see how many US babies were given it every year since 1880, when it peaked, its rank today, when half of everyone with it was born, and how old the ones alive now are. From Social Security records.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://matmat202.github.io/name-years/">
 <meta property="og:title" content="Name Years">
@@ -119,7 +119,10 @@ footer{font-size:12px;color:var(--ink-2);line-height:1.5;margin:18px 2px 8px}
     It counts Social Security card applications by sex at birth, so it is US-born only, thin before 1937 (when cards
     began), and silent on any name given to fewer than five babies of a sex in a year: a line that drops to zero may
     mean four. “Per 1,000” is per 1,000 babies of the same sex born that year, so a boom year does not look like a
-    fashion. “Half born by” is of everyone ever given the name, not of those alive today. A name that is a real
+    fashion. “Half of all born by” is of everyone ever given the name. “Alive” is an estimate: each year's babies times the
+    share of that year's births still alive, from the SSA's <a href="https://www.ssa.gov/oact/HistEst/CohLifeTablesHome.html">cohort
+    life tables</a> (2024 Trustees Report), so it leaves out anyone who moved to or from the US and knows nothing
+    about one name's people living longer than another's. A name that is a real
     share of both sexes gets a line for each. Built by Claude for <a href="https://matmat202.github.io/">matmat202</a>.</footer>
 </main>
 <script type="module" src="app.js"></script>
