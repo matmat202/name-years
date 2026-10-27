@@ -62,6 +62,121 @@ eq('default state is empty', L.encodeState({ names: [], unit: 'rate' }), '');
 eq('state round-trips', L.decodeState(L.encodeState({ names: ['Olivia', 'Emma'], unit: 'n' })), { names: ['Olivia', 'Emma'], unit: 'n' });
 eq('unknown unit falls back', L.decodeState('?n=Al&u=evil').unit, 'rate');
 
+// --- lines bin/mutate found unguarded (2026-10-27) ---------------------------------------
+//
+// `bin/mutate site/names-logic.js site/names-logic.test.mjs` scored 78/143, and an output
+// sweep (state/scratch/names-equiv/sweep.mjs, control 5/5) said 44 of the survivors change
+// what the page answers. The data checks below were already strong; these are the edges of
+// the pure functions, which is where the holes were.
+
+// totalOf skips the packed record's FIRST element, which is a year, not a count. Reading
+// it adds nineteen hundred babies to every name.
+eq('a total counts the counts, not the start year', L.totalOf({ F: [1990, 10, 20, 30] }), 60);
+eq('a total adds both sexes', L.totalOf({ F: [1990, 10], M: [2000, 5] }), 15);
+eq('a record with a year and no counts totals nothing', L.totalOf({ F: [1990] }), 0);
+eq('a missing sex is not a crash', [L.totalOf({ F: [1990, 7] }), L.totalOf({})], [7, 0]);
+
+// prefixMatches: the two-letter minimum is the SHARD's own key length, so a two-letter
+// prefix must work; the default limit is eight; and the ordering is babies-then-alphabet,
+// which needs three names in the wrong order to show.
+{
+  const many = {};
+  for (let i = 0; i < 11; i++) many['Ka' + String.fromCharCode(97 + i)] = { F: [1990, 11 - i] };
+  eq('two letters is enough to match', L.prefixMatches(many, 'ka').length, 8);
+  eq('the default limit is eight', L.prefixMatches(many, 'ka'), L.prefixMatches(many, 'ka', 8));
+  eq('one letter still matches nothing', L.prefixMatches(many, 'k'), []);
+  eq('an explicit limit is obeyed', L.prefixMatches(many, 'ka', 3), ['Kaa', 'Kab', 'Kac']);
+  eq('a limit of zero matches nothing', L.prefixMatches(many, 'ka', 0), []);
+  eq('no shard matches nothing', L.prefixMatches(null, 'ka'), []);
+  // Three names, biggest last in the input, so a broken comparator cannot pass on one pair.
+  const order = { Zeta: { F: [1990, 5] }, Zebra: { F: [1990, 50] }, Zero: { F: [1990, 500] } };
+  eq('most babies first, whatever order they arrive in', L.prefixMatches(order, 'ze'), ['Zero', 'Zebra', 'Zeta']);
+  // Three names with IDENTICAL totals, in reverse alphabetical order: the A-Z tie-break.
+  const tie = { Zoe: { F: [1990, 9] }, Zoa: { F: [1990, 9] }, Zob: { F: [1990, 9] } };
+  eq('equal totals fall back to A-Z', L.prefixMatches(tie, 'zo'), ['Zoa', 'Zob', 'Zoe']);
+}
+
+// yearly: the range is inclusive at BOTH ends, and a record wholly outside it contributes
+// nothing rather than writing past the array.
+eq('a record exactly spanning the range', L.yearly([1880, 1, 2, 3], 1880, 1882), [1, 2, 3]);
+eq('a record running past the end is clipped there', L.yearly([1880, 1, 2, 3], 1881, 1884), [2, 3, 0, 0]);
+eq('a record entirely after the range adds nothing', L.yearly([1885, 1, 2], 1880, 1884), [0, 0, 0, 0, 0]);
+eq('a record entirely before the range adds nothing', L.yearly([1870, 1, 2], 1880, 1884), [0, 0, 0, 0, 0]);
+eq('no record is a row of zeros, not an empty row', L.yearly(null, 1880, 1882), [0, 0, 0]);
+
+// perThousand: a year with no births of that sex is 0, not a division by zero.
+eq('a year with no births of that sex is zero', L.perThousand([10, 20], [0, 4000]), [0, 5]);
+eq('rates are per 1,000', L.perThousand([1], [1000]), [1]);
+
+// peak: the FIRST year can be the peak. `best < 0 ? null : best` must answer 0, not null.
+eq('the first year can be the peak', L.peak([5, 1]), 0);
+eq('the last year can be the peak', L.peak([0, 0, 4]), 2);
+eq('a peak among negatives and zeros is the only positive', L.peak([0, 7, 0]), 1);
+eq('nothing at all has no peak', [L.peak([]), L.peak([0])], [null, null]);
+// `peak` runs over RATES as well as counts, and a rate is routinely below one per 1,000:
+// a threshold of "more than one" would find no peak at all for most names.
+eq('a peak below one per thousand is still a peak', L.peak([0.5, 0.2]), 0);
+eq('a single baby is still the best year', L.peak([0, 1, 0]), 1);
+
+// livingCounts: a short `alive` table means zero, not undefined.
+eq('years past the end of the life table count as nobody alive', L.livingCounts([10, 10, 10], [1]), [10, 0, 0]);
+eq('an empty life table leaves nobody alive', L.livingCounts([10, 10], []), [0, 0]);
+
+// living(): the half-a-person cut, from both sides, and the age arithmetic.
+{
+  const half = L.living([1], [0.5], 1880, 2026), under = L.living([1], [0.49], 1880, 2026);
+  eq('half a living person still gets a median and an age', [half.n, half.median, half.age], [0.5, 1880, 146]);
+  eq('under half a person gets neither', [under.median, under.age], [null, null]);
+  eq('age is counted from the median year to asof', L.living([10], [1], 2000, 2026).age, 26);
+  eq('no births at all is a zero share, not a division by zero', L.living([0, 0], [1, 1], 1880, 2026).share, 0);
+}
+
+// fmtAbout: the hundred boundary rounds differently on each side, so a value just over it
+// is the one that tells them apart.
+eq('just over a hundred rounds to the ten', [L.fmtAbout(100.5), L.fmtAbout(105)], ['about 100', 'about 110']);
+eq('just under a hundred stays exact', [L.fmtAbout(99), L.fmtAbout(99.4)], ['about 99', 'about 99']);
+eq('half a person is one, not none', [L.fmtAbout(0.49), L.fmtAbout(0.5)], ['none', 'about 1']);
+
+// seriesFor: the 5% rule at exactly 5%, a name with no rank array, and `both`.
+{
+  const mt = { y0: 1880, y1: 1880, tot: { F: [1000], M: [1000] } };
+  const at = (m) => L.seriesFor('X', { F: [1880, 100 - m], M: [1880, m], rF: [1, 2, 3] }, mt);
+  eq('exactly five per cent earns a line', at(5).map((x) => x.sex), ['F', 'M']);
+  eq('just under five per cent does not', at(4).map((x) => x.sex), ['F']);
+  eq('and only a two-line name is labelled by sex', [L.seriesLabel(at(5)[0]), L.seriesLabel(at(4)[0])], ['X (girls)', 'X']);
+  eq('a sex with no babies at all gets no line', L.seriesFor('X', { F: [1880, 10], M: null }, mt).map((x) => x.sex), ['F']);
+  eq('a name with no rank array reads as unranked', L.seriesFor('X', { F: [1880, 10] }, mt)[0].rank, [0, 0, 0]);
+  eq('a name with no babies at all gives no lines', L.seriesFor('X', { F: null, M: null }, mt), []);
+  // Equal totals: the sex tie-break, which a single pair would not prove.
+  eq('an exact tie puts girls first', L.seriesFor('X', { F: [1880, 50], M: [1880, 50] }, mt).map((x) => x.sex), ['F', 'M']);
+}
+
+// niceTicks: a maximum that is already a round step, the step choice either side of each
+// boundary in [1, 2, 5, 10], and the epsilon that stops 20 becoming [0..25].
+eq('a maximum on a round step does not gain an empty one', L.niceTicks(20), [0, 5, 10, 15, 20]);
+eq('ten times that is the same shape', L.niceTicks(40), [0, 10, 20, 30, 40]);
+eq('five steps by two', L.niceTicks(5), [0, 2, 4, 6]);
+eq('four steps by one', L.niceTicks(4), [0, 1, 2, 3, 4]);
+eq('a maximum of one halves', L.niceTicks(1), [0, 0.5, 1]);
+eq('small rates still get ticks', L.niceTicks(0.05), [0, 0.02, 0.04, 0.06]);
+// The last entry of [1, 2, 5, 10] is only reached when a quarter of the maximum is more
+// than five times its own magnitude, so nothing above tests it.
+eq('a maximum needing the tenfold step', L.niceTicks(24), [0, 10, 20, 30]);
+eq('and the same one magnitude up', L.niceTicks(280), [0, 100, 200, 300]);
+eq('a negative maximum is treated as nothing', [L.niceTicks(-5), L.niceTicks(NaN)], [[0, 1], [0, 1]]);
+
+// fmtRate: each threshold from both sides, since one digit of precision is the difference.
+eq('ten is one decimal, a hair under it is two', [L.fmtRate(10), L.fmtRate(9.999)], ['10.0', '10.00']);
+eq('one is two decimals, a hair under it is three', [L.fmtRate(1), L.fmtRate(0.9999)], ['1.00', '1.000']);
+eq('a hundredth is three decimals, under it is a floor', [L.fmtRate(0.01), L.fmtRate(0.00999)], ['0.010', '<0.01']);
+eq('nothing is a dash, zero is a zero', [L.fmtRate(null), L.fmtRate(undefined), L.fmtRate(0)], ['—', '—', '0']);
+
+// decodeState: the query is cut at 120 characters before it is parsed, so a very long one
+// cannot smuggle a fifth name in past the cut.
+eq('the query is cut at 120 characters', L.decodeState('?n=' + 'A'.repeat(118) + ',Bob').names, ['A'.repeat(118)]);
+eq('no query is no names', L.decodeState('').names, []);
+eq('an empty n is no names', L.decodeState('?n=').names, []);
+
 // --- the shipped data --------------------------------------------------------------------
 const here = fileURLToPath(new URL('.', import.meta.url));
 const M = JSON.parse(readFileSync(here + 'data/meta.json', 'utf8'));
