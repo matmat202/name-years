@@ -1,6 +1,6 @@
 import {
   MAX_SERIES, shardKey, parseNames, lookup, prefixMatches, totalOf, seriesFor, seriesLabel,
-  peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, encodeState, decodeState, SEX_WORD, frFor, spellNote,
+  peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, encodeState, decodeState, SEX_WORD, abroadFor, spellNote, COUNTRIES,
   TILES, STATE_NAMES, BAND_LABELS, WITHHELD_MAX, whereRows, tileBand, extremes, fmtRatio,
 } from './names-logic.js';
 
@@ -15,8 +15,12 @@ const M = { l: 46, r: 96, t: 12, b: 28 };
 let META = null;
 const shards = new Map(); // key -> Promise<shard>
 const sshards = new Map(); // key -> Promise<state shard>
-const fshards = new Map(); // key -> Promise<French shard>
-const state = { names: [], unit: 'rate', fr: false };
+// The countries whose lines can be drawn beside the US ones, one at a time.
+const ABROAD = {
+  fr: { name: 'France', short: 'FR', label: 'France', dir: 'f', src: 'Insee', cache: new Map() },
+  ew: { name: 'England and Wales', short: 'E&W', label: 'E&W', dir: 'e', src: 'ONS', cache: new Map() },
+};
+const state = { names: [], unit: 'rate', cmp: '' };
 let current = []; // series, in slot order
 let runId = 0;
 
@@ -48,7 +52,7 @@ function shard(name, dir = 'n', cache = shards) {
 }
 // The state counts are a second look: if they fail to load, the chart still shows.
 const stateShard = (name) => shard(name, 's', sshards).catch(() => undefined);
-const frShard = (name) => shard(name, 'f', fshards).catch(() => undefined); // likewise
+const abroadShard = (name, c) => shard(name, ABROAD[c].dir, ABROAD[c].cache).catch(() => undefined); // likewise
 
 async function show(names, { push = true } = {}) {
   const id = ++runId;
@@ -59,10 +63,10 @@ async function show(names, { push = true } = {}) {
   let got;
   try {
     got = await Promise.all(names.map(async (n) => {
-      const [sh, ss, fs] = await Promise.all([shard(n), stateShard(n), frShard(n)]);
+      const [sh, ss, ...as] = await Promise.all([shard(n), stateShard(n), ...COUNTRIES.map((c) => abroadShard(n, c))]);
       const k = lookup(sh, n);
       return { typed: n, k, rec: k && sh[k], where: ss === undefined ? undefined : (k && ss?.[k]) || {},
-        fr: fs === undefined ? undefined : (k && fs?.[k]) || {} };
+        ab: Object.fromEntries(COUNTRIES.map((c, i) => [c, as[i] === undefined ? undefined : (k && as[i]?.[k]) || {}])) };
     }));
   }
   catch { if (id === runId) setStatus('Could not load the names. Try reloading.', true); return; }
@@ -72,7 +76,7 @@ async function show(names, { push = true } = {}) {
   const series = found.flatMap((g) => seriesFor(g.k, g.rec, META)
     .map((s) => ({ ...s, where: g.where === undefined ? undefined : whereRows(g.where[s.sex], META.where.states),
       cover: g.where?.[s.sex]?.length === 1 ? g.where[s.sex][0] : null,
-      fr: g.fr === undefined ? undefined : frFor(g.fr, s.sex, META) })));
+      ab: Object.fromEntries(COUNTRIES.map((c) => [c, g.ab[c] === undefined ? undefined : abroadFor(g.ab[c], s.sex, META, c)])) })));
   current = series.slice(0, MAX_SERIES).map((s, i) => ({ ...s, slot: i }));
   state.names = found.map((g) => g.k);
   $('q').value = state.names.join(', ');
@@ -85,9 +89,11 @@ async function show(names, { push = true } = {}) {
 }
 
 const vals = (s) => (state.unit === 'n' ? s.counts : s.rate);
-// The French lines on the chart: one per series that has one, when the toggle is on.
-const frLines = () => (state.fr ? current.filter((s) => s.fr) : []);
-const frVals = (s) => (state.unit === 'n' ? s.fr.counts : s.fr.rate);
+// The other country's lines on the chart: one per series that has one, when one is chosen.
+const ab = (s) => s.ab[state.cmp];
+const frLines = () => (state.cmp ? current.filter((s) => ab(s)) : []);
+const frVals = (s) => (state.unit === 'n' ? ab(s).counts : ab(s).rate);
+const C = () => ABROAD[state.cmp];
 const fmtVal = (v) => (state.unit === 'n' ? fmtInt(v) : fmtRate(v));
 
 function draw() {
@@ -107,7 +113,7 @@ function draw() {
   const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img',
     'aria-label': current.length
       ? `Line chart, ${state.unit === 'n' ? 'babies' : 'babies per 1,000 of the same sex'} named ${current.map(seriesLabel).join(', ')}, ${META.y0} to ${META.y1}`
-        + (frLines().length ? `, with dashed lines for France from ${META.fr.y0}` : '')
+        + (frLines().length ? `, with dashed lines for ${C().name} from ${META[state.cmp].y0}` : '')
       : 'Empty chart' });
   const ax = el('g', { class: 'ax' });
   for (const t of ticks) {
@@ -143,7 +149,7 @@ function draw() {
   const over = labels.length ? labels[labels.length - 1].y - (H - M.b) : 0;
   if (over > 0) for (const l of labels) l.y -= over;
   for (const l of labels) {
-    const t = l.fr ? `${seriesLabel(l.s)}${narrow ? ' FR' : ' · France'}` : seriesLabel(l.s);
+    const t = l.fr ? `${seriesLabel(l.s)}${narrow ? ' ' + C().short : ' · ' + C().label}` : seriesLabel(l.s);
     const cap = narrow ? 11 : 15;
     svg.append(el('text', { x: W - M.r + 8, y: l.y + 4, class: 'lab' }, t.length > cap ? t.slice(0, cap - 1) + '…' : t));
   }
@@ -163,8 +169,8 @@ function draw() {
     if (i < 0 || !current.length) { cross.setAttribute('visibility', 'hidden'); dots.replaceChildren(); tip.classList.remove('on'); return; }
     cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
     const pts = [...current.map((s) => ({ s, v: vals(s)[i], n: s.counts[i], r: s.rate[i] })),
-      ...frLines().filter((s) => s.fr.counts[i] != null)
-        .map((s) => ({ s, fr: true, v: frVals(s)[i], n: s.fr.counts[i], r: s.fr.rate[i] }))];
+      ...frLines().filter((s) => ab(s).counts[i] != null)
+        .map((s) => ({ s, fr: true, v: frVals(s)[i], n: ab(s).counts[i], r: ab(s).rate[i] }))];
     dots.replaceChildren(...pts.map((p) => el('circle', { cx: x(i), cy: y(p.v), r: p.fr ? 3.5 : 4.5,
       class: p.fr ? 'dot fr' : 'dot', fill: COLORS[p.s.slot], ...(p.fr ? { style: `fill:var(--card);stroke:${COLORS[p.s.slot]}` } : {}) })));
     tip.innerHTML = `<h3>${META.y0 + i}</h3><table></table>`;
@@ -172,7 +178,7 @@ function draw() {
     for (const p of pts.sort((a, b) => b.r - a.r)) {
       const tr = document.createElement('tr');
       tr.innerHTML = `<td><span class="sw${p.fr ? ' fr' : ''}" style="--c:${COLORS[p.s.slot]};background:${p.fr ? 'none' : COLORS[p.s.slot]}"></span></td><td class="v"></td><td class="v"></td>`;
-      tr.children[0].append(p.fr ? `${seriesLabel(p.s)}, France` : seriesLabel(p.s));
+      tr.children[0].append(p.fr ? `${seriesLabel(p.s)}, ${C().name}` : seriesLabel(p.s));
       tr.children[1].textContent = `${fmtInt(p.n)} babies`;
       tr.children[2].textContent = `${fmtRate(p.r)} / 1,000`;
       tb.append(tr);
@@ -194,7 +200,7 @@ function draw() {
 
   $('yl').textContent = current.length
     ? (state.unit === 'n' ? 'Babies given the name each year.' : 'Babies given the name per 1,000 babies of the same sex born that year.')
-      + (frLines().length ? ` Dashed: France, from ${META.fr.y0}, per 1,000 French babies of the same sex.` : '')
+      + (frLines().length ? ` Dashed: ${C().name}, from ${META[state.cmp].y0}, ${state.unit === 'n' ? 'babies there' : `per 1,000 babies of the same sex in ${C().src}'s count`}.` : '')
       + ' Hover or tap the chart for a year.'
     : '';
   drawFacts();
@@ -225,7 +231,7 @@ function drawFacts() {
       ['Half of those alive born by', lv.median == null ? '—' : `${lv.median}: they turn ${lv.age} in ${META.asof}`],
       ['Since 1880', `${fmtInt(s.total)} ${SEX_WORD[s.sex]}`],
     ];
-    rows.push(...frRows(s));
+    for (const c of COUNTRIES) rows.push(...abroadRows(s, c));
     const W = META.where;
     if (s.where === undefined) rows.push(['By state', 'could not load the state counts']);
     else if (s.cover != null) rows.push(['By state', `the state counts hold only ${s.cover}% of these ${SEX_WORD[s.sex]} (the rest are withheld wherever a state had under five in a year): too thin to map fairly`]);
@@ -247,16 +253,17 @@ function drawFacts() {
   }
 }
 
-// The French rows of a name's card: when it peaked there, and how many since 1900.
-function frRows(s) {
-  const F = META.fr, w = SEX_WORD[s.sex];
-  if (s.fr === undefined) return [['In France', 'could not load the French counts']];
-  if (!s.fr) return [['In France', `fewer than ${fmtInt(F.floor)} ${w} since ${F.y0}, as Insee lists them`]];
-  const p = peak(s.fr.rate);
-  const sp = spellNote(s.name, s.fr.spell);
+// A country's rows on a name's card: when it peaked there, and how many since its file began.
+function abroadRows(s, c) {
+  const F = META[c], A = ABROAD[c], w = SEX_WORD[s.sex], a = s.ab[c];
+  if (!F) return [];
+  if (a === undefined) return [[`In ${A.name}`, `could not load the ${A.src} counts`]];
+  if (!a) return [[`In ${A.name}`, `fewer than ${fmtInt(F.floor)} ${w} since ${F.y0}, as ${A.src} lists them`]];
+  const p = peak(a.rate);
+  const sp = spellNote(s.name, a.spell);
   return [
-    ['Most popular in France', `${META.y0 + p}: ${fmtRate(s.fr.rate[p])} per 1,000 ${w}`],
-    [`In France since ${F.y0}`, `${fmtInt(s.fr.total)} ${w}` + (sp ? `, spelled ${sp}` : '')],
+    [`Most popular in ${A.name}`, `${META.y0 + p}: ${fmtRate(a.rate[p])} per 1,000 ${w}`],
+    [`In ${A.name} since ${F.y0}`, `${fmtInt(a.total)} ${w}` + (sp ? `, spelled ${sp}` : '')],
   ];
 }
 
@@ -317,7 +324,7 @@ function drawTable() {
     for (const w of ['babies', 'per 1,000']) { const th = document.createElement('th'); th.textContent = `${seriesLabel(s)}, ${w}`; head.append(th); }
   }
   for (const s of frLines()) {
-    for (const w of ['babies', 'per 1,000']) { const th = document.createElement('th'); th.textContent = `${seriesLabel(s)}, France, ${w}`; head.append(th); }
+    for (const w of ['babies', 'per 1,000']) { const th = document.createElement('th'); th.textContent = `${seriesLabel(s)}, ${C().name}, ${w}`; head.append(th); }
   }
   tbl.append(head);
   for (let i = META.y1 - META.y0; i >= 0; i--) {
@@ -327,8 +334,8 @@ function drawTable() {
       for (const v of [fmtInt(s.counts[i]), fmtRate(s.rate[i])]) { const c = document.createElement('td'); c.textContent = v; tr.append(c); }
     }
     for (const s of frLines()) {
-      const none = s.fr.counts[i] == null;
-      for (const v of none ? ['', ''] : [fmtInt(s.fr.counts[i]), fmtRate(s.fr.rate[i])]) { const c = document.createElement('td'); c.textContent = v; tr.append(c); }
+      const none = ab(s).counts[i] == null;
+      for (const v of none ? ['', ''] : [fmtInt(ab(s).counts[i]), fmtRate(ab(s).rate[i])]) { const c = document.createElement('td'); c.textContent = v; tr.append(c); }
     }
     tbl.append(tr);
   }
@@ -408,12 +415,15 @@ async function main() {
       draw();
     });
   }
-  $('frbtn').addEventListener('click', () => {
-    state.fr = !state.fr;
-    $('frbtn').setAttribute('aria-pressed', String(state.fr));
-    history.replaceState(null, '', location.pathname + encodeState(state));
-    draw();
-  });
+  const cmpBtns = () => $('cmp').querySelectorAll('button');
+  const setCmp = (c) => { state.cmp = c; for (const o of cmpBtns()) o.setAttribute('aria-pressed', String(o.dataset.c === c)); };
+  for (const b of cmpBtns()) {
+    b.addEventListener('click', () => {
+      setCmp(state.cmp === b.dataset.c ? '' : b.dataset.c); // pressing the chosen one again turns it off
+      history.replaceState(null, '', location.pathname + encodeState(state));
+      draw();
+    });
+  }
   const q = $('q');
   q.addEventListener('input', onType);
   q.addEventListener('keydown', (e) => {
@@ -433,10 +443,9 @@ async function main() {
   addEventListener('resize', () => { if (innerWidth !== lastW) { lastW = innerWidth; draw(); } });
   const s = decodeState(location.search);
   state.unit = s.unit;
-  state.fr = s.fr;
-  $('frbtn').setAttribute('aria-pressed', String(s.fr));
+  setCmp(s.cmp);
   for (const o of $('units').querySelectorAll('button')) o.setAttribute('aria-pressed', String(o.dataset.u === s.unit));
-  await show(s.names.length ? s.names : [META.top.F[0], META.top.M[0]], { push: s.names.length > 0 || s.fr });
+  await show(s.names.length ? s.names : [META.top.F[0], META.top.M[0]], { push: s.names.length > 0 || !!s.cmp });
 }
 
 main();

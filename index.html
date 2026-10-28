@@ -65,6 +65,7 @@ label.v{position:absolute;left:-9999px}
 .dot.fr{stroke-width:2}
 .sw.fr{box-sizing:border-box;border:2px dashed var(--c)}
 .ctl{display:inline-flex;gap:8px;flex-wrap:wrap}
+.cmp{display:inline-flex;gap:8px;flex-wrap:wrap}
 .frbtn{font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink-2);cursor:pointer}
 .frbtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--card);font-weight:600}
 .frbtn[aria-pressed="true"]:focus-visible{outline-offset:2px}
@@ -123,7 +124,10 @@ footer{font-size:12px;color:var(--ink-2);line-height:1.5;margin:18px 2px 8px}
       <button type="button" data-u="rate" aria-pressed="true">Per 1,000 babies</button>
       <button type="button" data-u="n" aria-pressed="false">Babies</button>
     </div>
-    <button type="button" class="frbtn" id="frbtn" aria-pressed="false">Compare France</button>
+    <div class="cmp" id="cmp" role="group" aria-label="Compare with another country">
+      <button type="button" class="frbtn" data-c="fr" aria-pressed="false">Compare France</button>
+      <button type="button" class="frbtn" data-c="ew" aria-pressed="false">England &amp; Wales</button>
+    </div>
     </div>
   </div>
 
@@ -150,6 +154,10 @@ footer{font-size:12px;color:var(--ink-2);line-height:1.5;margin:18px 2px 8px}
     five, so a spelling given to one or two babies in a year is not there; Insee warns the file is incomplete before 1946.
     Its accented and hyphenated spellings are matched to the US name with the same letters (Léo and Leo are both Leo),
     and French “per 1,000” is per 1,000 babies of the same sex in Insee's file.
+    England and Wales is the <a href="https://www.ons.gov.uk/peoplepopulationandcommunity/birthsdeathsandmarriages/livebirths/datasets/babynamesinenglandandwalesfrom1996">Office
+    for National Statistics' baby names</a> (1996 to 2025, Open Government Licence v3.0), births registered there by exact
+    first name, any name given to fewer than three babies of a sex in a year left out; its spellings are matched to the
+    US name the same way, and “per 1,000” is per 1,000 babies of the same sex in the ONS count.
     It counts Social Security card applications by sex at birth, so it is US-born only, thin before 1937 (when cards
     began), and silent on any name given to fewer than five babies of a sex in a year: a line that drops to zero may
     mean four. “Per 1,000” is per 1,000 babies of the same sex born that year, so a boom year does not look like a

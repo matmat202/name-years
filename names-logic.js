@@ -138,18 +138,23 @@ export function fmtRate(r) {
 // "#1", "#1,204", or "not in the list" for a name nobody got (5+) that year.
 export const rankLabel = (r) => (r > 0 ? `#${fmtInt(r)}` : 'unranked');
 
-// ?n=Olivia,Emma&u=n&f=1 (f: draw the French lines). Unknown values fall back rather than throw.
-export function encodeState({ names, unit, fr }) {
+// ?n=Olivia,Emma&u=n&c=ew (c: the country whose lines are drawn beside the US ones; f=1 is
+// France's older spelling and still read). Unknown values fall back rather than throw.
+export const COUNTRIES = ['fr', 'ew'];
+export function encodeState({ names, unit, cmp }) {
   const p = new URLSearchParams();
   if (names && names.length) p.set('n', names.join(','));
   if (unit === 'n') p.set('u', 'n');
-  if (fr) p.set('f', '1');
+  if (cmp === 'fr') p.set('f', '1');
+  else if (COUNTRIES.includes(cmp)) p.set('c', cmp);
   const s = p.toString().replace(/%2C/g, ',');
   return s ? `?${s}` : '';
 }
 export function decodeState(search) {
   const p = new URLSearchParams(search);
-  return { names: parseNames((p.get('n') || '').slice(0, 120)), unit: p.get('u') === 'n' ? 'n' : 'rate', fr: p.get('f') === '1' };
+  const c = p.get('c');
+  return { names: parseNames((p.get('n') || '').slice(0, 120)), unit: p.get('u') === 'n' ? 'n' : 'rate',
+    cmp: COUNTRIES.includes(c) ? c : p.get('f') === '1' ? 'fr' : '' };
 }
 
 // --- where: the state files ----------------------------------------------------------
@@ -225,12 +230,13 @@ export function fmtRatio(r) {
   return `${r.toFixed(2)}×`;
 }
 
-// --- France: Insee's file, 1900 on ------------------------------------------------------
-// A name's French line for one sex, or null if under meta.fr.floor French babies of that
-// sex since meta.fr.y0. counts/rate run over the US years y0..y1, null outside the French
-// years, so both lines share one x axis and the French one starts late instead of at zero.
-export function frFor(rec, sex, meta) {
-  const F = meta.fr;
+// --- Abroad: Insee's file for France (1900 on), ONS's for England and Wales (1996 on) ----
+// A name's line in country `key` for one sex, or null if under meta[key].floor babies of
+// that sex since meta[key].y0. counts/rate run over the US years y0..y1, null outside the
+// country's years, so both lines share one x axis and the other starts late, not at zero.
+export const frFor = (rec, sex, meta) => abroadFor(rec, sex, meta, 'fr');
+export function abroadFor(rec, sex, meta, key) {
+  const F = meta[key];
   if (!F || !rec?.[sex]) return null;
   const c = yearly(rec[sex], F.y0, F.y1);
   const r = perThousand(c, F.tot[sex]);

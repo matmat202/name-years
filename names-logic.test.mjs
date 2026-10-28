@@ -59,10 +59,14 @@ eq('rates format', [0, 0.004, 0.25, 3.14159, 12.34].map(L.fmtRate), ['0', '<0.01
 eq('rank labels', [L.rankLabel(1), L.rankLabel(1204), L.rankLabel(0)], ['#1', '#1,204', 'unranked']);
 eq('state encodes with readable commas', L.encodeState({ names: ['Olivia', 'Emma'], unit: 'n' }), '?n=Olivia,Emma&u=n');
 eq('default state is empty', L.encodeState({ names: [], unit: 'rate' }), '');
-eq('state round-trips', L.decodeState(L.encodeState({ names: ['Olivia', 'Emma'], unit: 'n' })), { names: ['Olivia', 'Emma'], unit: 'n', fr: false });
-eq('the France toggle round-trips', L.decodeState(L.encodeState({ names: ['James'], unit: 'rate', fr: true })), { names: ['James'], unit: 'rate', fr: true });
-eq('France on is f=1 in the URL', L.encodeState({ names: ['James'], fr: true }), '?n=James&f=1');
-eq('any other f is off', L.decodeState('?n=James&f=yes').fr, false);
+eq('state round-trips', L.decodeState(L.encodeState({ names: ['Olivia', 'Emma'], unit: 'n' })), { names: ['Olivia', 'Emma'], unit: 'n', cmp: '' });
+eq('the France choice round-trips', L.decodeState(L.encodeState({ names: ['James'], unit: 'rate', cmp: 'fr' })), { names: ['James'], unit: 'rate', cmp: 'fr' });
+eq('the England and Wales choice round-trips', L.decodeState(L.encodeState({ names: ['James'], unit: 'rate', cmp: 'ew' })), { names: ['James'], unit: 'rate', cmp: 'ew' });
+eq('France on is still f=1 in the URL, so shared links keep working', L.encodeState({ names: ['James'], cmp: 'fr' }), '?n=James&f=1');
+eq('England and Wales is c=ew', L.encodeState({ names: ['James'], cmp: 'ew' }), '?n=James&c=ew');
+eq('an unknown country is ignored', L.decodeState('?n=James&c=xx'), { names: ['James'], unit: 'rate', cmp: '' });
+eq('c= wins over a stale f=1', L.decodeState('?n=James&f=1&c=ew').cmp, 'ew');
+eq('any other f is off', L.decodeState('?n=James&f=yes').cmp, '');
 {
   // frFor on a made-up record: aligned to the US years, null before France begins.
   const meta = { y0: 1898, y1: 1903, fr: { y0: 1900, y1: 1903, floor: 100, tot: { M: [1000, 2000, 1000, 500] } } };
@@ -402,6 +406,54 @@ ok('the biggest shard stays under 1 MB', Math.max(...files.map((f) => readFileSy
   eq('French lines, as meta counts them', lines, M.counts.frLines);
   ok('the biggest French shard stays under 1 MB', Math.max(...ff.map((f) => readFileSync(here + 'data/f/' + f).length)) < 1e6);
   ok('every French shard has a name shard', ff.every((f) => files.includes(f)));
+}
+
+// --- England and Wales ------------------------------------------------------------------
+{
+  const E = M.ew;
+  eq('England and Wales covers 1996 to 2025', [E.y0, E.y1], [1996, 2025]);
+  const ef = readdirSync(here + 'data/e').filter((f) => f.endsWith('.json'));
+  const ES = {};
+  for (const f of ef) ES[f.slice(0, -5)] = JSON.parse(readFileSync(here + 'data/e/' + f, 'utf8'));
+  const eget = (n) => ES[L.shardKey(n)]?.[n];
+  const eyear = (n, sex, y) => L.yearly(eget(n)?.[sex], E.y0, E.y1)[y - E.y0];
+  // Read off the ONS workbook by a separate reader (state/scratch/name-ew/xl.py), not build.py.
+  // Muhammad 2023 = 4,661 is also the figure in ONS's own 2023 release.
+  eq('Muhammad, boys, E&W 2023: 4,661', eyear('Muhammad', 'M', 2023), 4661);
+  eq('Muhammad, boys, E&W 2025: 5,957', eyear('Muhammad', 'M', 2025), 5957);
+  eq('Mohammed stays its own spelling (different letters): 2025 = 1,712', eyear('Mohammed', 'M', 2025), 1712);
+  eq('Olivia, girls, E&W 1996: 2,456', eyear('Olivia', 'F', 1996), 2456);
+  eq('Olivia, girls, E&W 2023: 2,906', eyear('Olivia', 'F', 2023), 2906);
+  eq('Jacob, boys, E&W 2013: 5,126', eyear('Jacob', 'M', 2013), 5126);
+  eq('Ashley, girls, E&W 1996: 287', eyear('Ashley', 'F', 1996), 287);
+  eq("Aisha, girls, E&W 2015: Aisha 610 + A'Isha 11, spellings summed", eyear('Aisha', 'F', 2015), 621);
+  // The point: Jacob peaks in the US in the 1990s and in England and Wales after 2005.
+  const us = L.seriesFor('Jacob', get('Jacob'), M)[0];
+  const ew = L.abroadFor(eget('Jacob'), 'M', M, 'ew');
+  ok('Jacob: US peak by rate before 2000, E&W peak after 2005',
+    M.y0 + L.peak(us.rate) < 2000 && M.y0 + L.peak(ew.rate) > 2005, [M.y0 + L.peak(us.rate), M.y0 + L.peak(ew.rate)]);
+  eq('the E&W line is null before 1996 on the shared axis', [ew.counts[1995 - M.y0], ew.counts[1996 - M.y0] > 0], [null, true]);
+  let misfiled = 0, orphan = 0, small = 0, over = 0, lines = 0;
+  const sum = { F: new Array(E.y1 - E.y0 + 1).fill(0), M: new Array(E.y1 - E.y0 + 1).fill(0) };
+  for (const [k, sh] of Object.entries(ES)) for (const [n, rec] of Object.entries(sh)) {
+    if (L.shardKey(n) !== k) misfiled++;
+    if (!S[k]?.[n]) orphan++;
+    for (const sex of ['F', 'M']) if (rec[sex]) {
+      lines++;
+      const c = L.yearly(rec[sex], E.y0, E.y1);
+      if (c.reduce((a, b) => a + b, 0) < E.floor) small++;
+      c.forEach((v, i) => { sum[sex][i] += v; });
+    }
+  }
+  for (const sex of ['F', 'M']) sum[sex].forEach((v, i) => { if (v > E.tot[sex][i]) over++; });
+  eq('no E&W record in the wrong shard', misfiled, 0);
+  eq('every E&W record is a name the US shards have', orphan, 0);
+  eq(`no E&W line under the ${E.floor}-baby floor`, small, 0);
+  eq('no year where the E&W lines exceed the E&W total', over, 0);
+  eq('E&W lines, as meta counts them', lines, M.counts.ewLines);
+  // E&W had 620k-730k live births a year since 1996; a reader that dropped a sheet, a year or a block of names would fall outside.
+  ok('E&W totals: 240k-360k of each sex every year', ['F', 'M'].every((x) => E.tot[x].every((v) => v > 240000 && v < 360000)), E.tot.F.slice(-3));
+  ok('every E&W shard has a name shard', ef.every((f) => files.includes(f)));
 }
 
 console.log(`${fail ? 'FAILED' : 'ok'}: ${pass} passed, ${fail} failed`);
