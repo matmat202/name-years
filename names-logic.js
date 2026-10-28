@@ -138,17 +138,18 @@ export function fmtRate(r) {
 // "#1", "#1,204", or "not in the list" for a name nobody got (5+) that year.
 export const rankLabel = (r) => (r > 0 ? `#${fmtInt(r)}` : 'unranked');
 
-// ?n=Olivia,Emma&u=n. Unknown values fall back rather than throw.
-export function encodeState({ names, unit }) {
+// ?n=Olivia,Emma&u=n&f=1 (f: draw the French lines). Unknown values fall back rather than throw.
+export function encodeState({ names, unit, fr }) {
   const p = new URLSearchParams();
   if (names && names.length) p.set('n', names.join(','));
   if (unit === 'n') p.set('u', 'n');
+  if (fr) p.set('f', '1');
   const s = p.toString().replace(/%2C/g, ',');
   return s ? `?${s}` : '';
 }
 export function decodeState(search) {
   const p = new URLSearchParams(search);
-  return { names: parseNames((p.get('n') || '').slice(0, 120)), unit: p.get('u') === 'n' ? 'n' : 'rate' };
+  return { names: parseNames((p.get('n') || '').slice(0, 120)), unit: p.get('u') === 'n' ? 'n' : 'rate', fr: p.get('f') === '1' };
 }
 
 // --- where: the state files ----------------------------------------------------------
@@ -222,4 +223,26 @@ export function fmtRatio(r) {
   if (r >= 10) return `${Math.round(r)}×`;
   if (r >= 1) return `${r.toFixed(1)}×`;
   return `${r.toFixed(2)}×`;
+}
+
+// --- France: Insee's file, 1900 on ------------------------------------------------------
+// A name's French line for one sex, or null if under meta.fr.floor French babies of that
+// sex since meta.fr.y0. counts/rate run over the US years y0..y1, null outside the French
+// years, so both lines share one x axis and the French one starts late instead of at zero.
+export function frFor(rec, sex, meta) {
+  const F = meta.fr;
+  if (!F || !rec?.[sex]) return null;
+  const c = yearly(rec[sex], F.y0, F.y1);
+  const r = perThousand(c, F.tot[sex]);
+  const at = (i) => meta.y0 + i;
+  const inF = (i) => at(i) >= F.y0 && at(i) <= F.y1;
+  const n = meta.y1 - meta.y0 + 1;
+  const counts = Array.from({ length: n }, (_, i) => (inF(i) ? c[at(i) - F.y0] : null));
+  const rate = Array.from({ length: n }, (_, i) => (inF(i) ? r[at(i) - F.y0] : null));
+  return { counts, rate, total: c.reduce((a, b) => a + b, 0), spell: rec['s' + sex] || [] };
+}
+
+// "Léo, Leo" when the French spellings are not just the name itself; '' otherwise.
+export function spellNote(name, spell) {
+  return spell.length && !(spell.length === 1 && spell[0] === name) ? spell.join(', ') : '';
 }

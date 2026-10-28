@@ -61,6 +61,13 @@ label.v{position:absolute;left:-9999px}
 .ax line{stroke:var(--grid);stroke-width:1}
 .ax .base{stroke:var(--ink-3)}
 .ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.ln.fr{stroke-dasharray:5 4;stroke-linecap:butt}
+.dot.fr{stroke-width:2}
+.sw.fr{box-sizing:border-box;border:2px dashed var(--c)}
+.ctl{display:inline-flex;gap:8px;flex-wrap:wrap}
+.frbtn{font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink-2);cursor:pointer}
+.frbtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--card);font-weight:600}
+.frbtn[aria-pressed="true"]:focus-visible{outline-offset:2px}
 .dot{stroke:var(--card);stroke-width:2}
 .cross{stroke:var(--ink-3);stroke-width:1;stroke-dasharray:3 3}
 .tip{position:absolute;top:8px;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:10px;
@@ -111,9 +118,12 @@ footer{font-size:12px;color:var(--ink-2);line-height:1.5;margin:18px 2px 8px}
 
   <div class="row">
     <p class="status" id="status" aria-live="polite"></p>
+    <div class="ctl">
     <div class="units" id="units" role="group" aria-label="Chart units">
       <button type="button" data-u="rate" aria-pressed="true">Per 1,000 babies</button>
       <button type="button" data-u="n" aria-pressed="false">Babies</button>
+    </div>
+    <button type="button" class="frbtn" id="frbtn" aria-pressed="false">Compare France</button>
     </div>
   </div>
 
@@ -135,6 +145,11 @@ footer{font-size:12px;color:var(--ink-2);line-height:1.5;margin:18px 2px 8px}
     (births from 1910, also via the Internet Archive), which withholds a name given to fewer than five babies of a sex in a
     state in a year. Each state is set against the US rate of the same years, so a name that peaked before a state grew
     is not called rare there.
+    France is <a href="https://www.insee.fr/fr/statistiques/8595130">Insee's fichier des prénoms</a> (édition 2025,
+    Licence Ouverte 2.0), births in France from 1900 by first given name, each count rounded by Insee to the nearest
+    five, so a spelling given to one or two babies in a year is not there; Insee warns the file is incomplete before 1946.
+    Its accented and hyphenated spellings are matched to the US name with the same letters (Léo and Leo are both Leo),
+    and French “per 1,000” is per 1,000 babies of the same sex in Insee's file.
     It counts Social Security card applications by sex at birth, so it is US-born only, thin before 1937 (when cards
     began), and silent on any name given to fewer than five babies of a sex in a year: a line that drops to zero may
     mean four. “Per 1,000” is per 1,000 babies of the same sex born that year, so a boom year does not look like a

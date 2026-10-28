@@ -59,7 +59,24 @@ eq('rates format', [0, 0.004, 0.25, 3.14159, 12.34].map(L.fmtRate), ['0', '<0.01
 eq('rank labels', [L.rankLabel(1), L.rankLabel(1204), L.rankLabel(0)], ['#1', '#1,204', 'unranked']);
 eq('state encodes with readable commas', L.encodeState({ names: ['Olivia', 'Emma'], unit: 'n' }), '?n=Olivia,Emma&u=n');
 eq('default state is empty', L.encodeState({ names: [], unit: 'rate' }), '');
-eq('state round-trips', L.decodeState(L.encodeState({ names: ['Olivia', 'Emma'], unit: 'n' })), { names: ['Olivia', 'Emma'], unit: 'n' });
+eq('state round-trips', L.decodeState(L.encodeState({ names: ['Olivia', 'Emma'], unit: 'n' })), { names: ['Olivia', 'Emma'], unit: 'n', fr: false });
+eq('the France toggle round-trips', L.decodeState(L.encodeState({ names: ['James'], unit: 'rate', fr: true })), { names: ['James'], unit: 'rate', fr: true });
+eq('France on is f=1 in the URL', L.encodeState({ names: ['James'], fr: true }), '?n=James&f=1');
+eq('any other f is off', L.decodeState('?n=James&f=yes').fr, false);
+{
+  // frFor on a made-up record: aligned to the US years, null before France begins.
+  const meta = { y0: 1898, y1: 1903, fr: { y0: 1900, y1: 1903, floor: 100, tot: { M: [1000, 2000, 1000, 500] } } };
+  const f = L.frFor({ M: [1901, 10, 0, 5], sM: ['Léo', 'Leo'] }, 'M', meta);
+  eq('frFor counts: null before 1900, zero where Insee lists none', f.counts, [null, null, 0, 10, 0, 5]);
+  eq('frFor rate per 1,000 of the French file', f.rate, [null, null, 0, 5, 0, 10]);
+  eq('frFor total and spellings', [f.total, f.spell], [15, ['Léo', 'Leo']]);
+  eq('frFor peak is by rate, on the shared axis (1903, not 1901)', 1898 + L.peak(f.rate), 1903);
+  eq('no French record: null', L.frFor({}, 'M', meta), null);
+  eq('no fr in meta: null', L.frFor({ M: [1901, 1] }, 'M', { y0: 1898, y1: 1903 }), null);
+  eq('spellNote hides a lone same spelling', L.spellNote('James', ['James']), '');
+  eq('spellNote lists accents', L.spellNote('Leo', ['Léo', 'Leo']), 'Léo, Leo');
+  eq('spellNote shows a hyphen', L.spellNote('Jeanpierre', ['Jean-Pierre']), 'Jean-Pierre');
+}
 eq('unknown unit falls back', L.decodeState('?n=Al&u=evil').unit, 'rate');
 
 // --- lines bin/mutate found unguarded (2026-10-27) ---------------------------------------
@@ -343,6 +360,49 @@ ok('rising names grew from 50+ to 300+', ['F', 'M'].every((s) => M.rising[s].len
   ok('the biggest state shard stays under 1 MB', Math.max(...sf.map((f) => readFileSync(here + 'data/s/' + f).length)) < 1e6);
 }
 ok('the biggest shard stays under 1 MB', Math.max(...files.map((f) => readFileSync(here + 'data/n/' + f).length)) < 1e6);
+
+// --- France ----------------------------------------------------------------------------
+{
+  const F = M.fr;
+  eq('France covers 1900 to 2025', [F.y0, F.y1], [1900, 2025]);
+  const ff = readdirSync(here + 'data/f').filter((f) => f.endsWith('.json'));
+  const FS = {};
+  for (const f of ff) FS[f.slice(0, -5)] = JSON.parse(readFileSync(here + 'data/f/' + f, 'utf8'));
+  const fget = (n) => FS[L.shardKey(n)]?.[n];
+  const fyear = (n, sex, y) => L.yearly(fget(n)?.[sex], F.y0, F.y1)[y - F.y0];
+  // Facts read off Insee's own CSV (unzip -p data/fr.zip | awk -F';' '$2=="JAMES" && $3==2021').
+  eq('James, boys, France 2021: 395', fyear('James', 'M', 2021), 395);
+  eq('Robert, boys, France 1926: 11,580', fyear('Robert', 'M', 1926), 11580);
+  eq('Marie, girls, France 1900: 48,695', fyear('Marie', 'F', 1900), 48695);
+  eq('Leo, boys, France 2025: LÉO 3,420 + LEO 170', fyear('Leo', 'M', 2025), 3590);
+  eq('Leo lists both spellings, most first', fget('Leo').sM, ['Léo', 'Leo']);
+  eq('French girls in the file, 1950: 430,345', F.tot.F[1950 - F.y0], 430345);
+  // The point of the feature: on the shipped data, James peaks in France 70+ years after the US.
+  const us = L.seriesFor('James', get('James'), M)[0];
+  const fr = L.frFor(fget('James'), 'M', M);
+  ok('James: US peak by rate before 1950, French peak after 2015',
+    M.y0 + L.peak(us.rate) < 1950 && M.y0 + L.peak(fr.rate) > 2015, [M.y0 + L.peak(us.rate), M.y0 + L.peak(fr.rate)]);
+  let misfiled = 0, orphan = 0, small = 0, over = 0, lines = 0;
+  const sum = { F: new Array(F.y1 - F.y0 + 1).fill(0), M: new Array(F.y1 - F.y0 + 1).fill(0) };
+  for (const [k, sh] of Object.entries(FS)) for (const [n, rec] of Object.entries(sh)) {
+    if (L.shardKey(n) !== k) misfiled++;
+    if (!S[k]?.[n]) orphan++; // the page only looks up names the US shard has
+    for (const sex of ['F', 'M']) if (rec[sex]) {
+      lines++;
+      const c = L.yearly(rec[sex], F.y0, F.y1);
+      if (c.reduce((a, b) => a + b, 0) < F.floor) small++;
+      c.forEach((v, i) => { sum[sex][i] += v; });
+    }
+  }
+  for (const sex of ['F', 'M']) sum[sex].forEach((v, i) => { if (v > F.tot[sex][i]) over++; });
+  eq('no French record in the wrong shard', misfiled, 0);
+  eq('every French record is a name the US shards have', orphan, 0);
+  eq(`no French line under the ${F.floor}-baby floor`, small, 0);
+  eq('no year where the French lines exceed the French total', over, 0);
+  eq('French lines, as meta counts them', lines, M.counts.frLines);
+  ok('the biggest French shard stays under 1 MB', Math.max(...ff.map((f) => readFileSync(here + 'data/f/' + f).length)) < 1e6);
+  ok('every French shard has a name shard', ff.every((f) => files.includes(f)));
+}
 
 console.log(`${fail ? 'FAILED' : 'ok'}: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
