@@ -77,6 +77,17 @@ summary{cursor:pointer;font-size:13px;color:var(--ink-2)}
 .tbl table{border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;margin-top:6px;width:100%}
 .tbl th,.tbl td{padding:3px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
 .tbl th:first-child,.tbl td:first-child{text-align:left}
+figure.where{margin:10px 0 0}
+.tiles{display:grid;grid-template-columns:repeat(12,1fr);gap:2px;max-width:420px}
+.tiles .t{aspect-ratio:1;border:0;border-radius:3px;padding:0;font:600 9px/1 var(--f-ui);color:var(--ink);cursor:pointer;min-width:0}
+.t.q0{background:color-mix(in srgb,var(--s1) 70%,var(--card))}.t.q1{background:color-mix(in srgb,var(--s1) 32%,var(--card))}
+.t.q2{background:var(--grid)}.t.q3{background:color-mix(in srgb,var(--s2) 30%,var(--card))}
+.t.q4{background:color-mix(in srgb,var(--s2) 55%,var(--card))}.t.q5{background:color-mix(in srgb,var(--s2) 80%,var(--card))}
+.t.na{background:var(--card);outline:1px dashed var(--line)}
+.key{display:flex;flex-wrap:wrap;gap:4px 10px;list-style:none;margin:6px 0 0;padding:0;font-size:11px;color:var(--ink-2)}
+.key li{display:flex;align-items:center;gap:4px}.key .t{display:inline-block;width:11px;height:11px;border-radius:2px}
+.pick{font-size:12px;margin:4px 0 0;min-height:1.3em;color:var(--ink)}
+figure.where figcaption{font-size:11px;color:var(--ink-3);margin-top:4px;line-height:1.4}
 footer{font-size:12px;color:var(--ink-2);line-height:1.5;margin:18px 2px 8px}
 </style>
 </head>
@@ -116,6 +127,10 @@ footer{font-size:12px;color:var(--ink-2);line-height:1.5;margin:18px 2px 8px}
   <footer>Data: the US <a href="https://www.ssa.gov/oact/babynames/limits.html">Social Security Administration</a>'s
     national baby names file (public domain), births <span id="span">1880–2025</span>, taken from the
     <a href="https://web.archive.org/web/2026/https://www.ssa.gov/oact/babynames/names.zip">Internet Archive's copy</a> of it.
+    The state maps use the SSA's <a href="https://www.ssa.gov/oact/babynames/limits.html">names by state</a> file
+    (births from 1910, also via the Internet Archive), which withholds a name given to fewer than five babies of a sex in a
+    state in a year. Each state is set against the US rate of the same years, so a name that peaked before a state grew
+    is not called rare there.
     It counts Social Security card applications by sex at birth, so it is US-born only, thin before 1937 (when cards
     began), and silent on any name given to fewer than five babies of a sex in a year: a line that drops to zero may
     mean four. “Per 1,000” is per 1,000 babies of the same sex born that year, so a boom year does not look like a

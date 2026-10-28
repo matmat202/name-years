@@ -150,3 +150,76 @@ export function decodeState(search) {
   const p = new URLSearchParams(search);
   return { names: parseNames((p.get('n') || '').slice(0, 120)), unit: p.get('u') === 'n' ? 'n' : 'rate' };
 }
+
+// --- where: the state files ----------------------------------------------------------
+// A tile per state (50 and DC), [row, col]: roughly where it sits, every tile the same size
+// so Rhode Island counts as much as Texas.
+export const TILES = {
+  AK: [0, 0], ME: [0, 11], VT: [1, 10], NH: [1, 11],
+  WA: [2, 1], ID: [2, 2], MT: [2, 3], ND: [2, 4], MN: [2, 5], IL: [2, 6], WI: [2, 7], MI: [2, 8], NY: [2, 9], RI: [2, 10], MA: [2, 11],
+  OR: [3, 1], NV: [3, 2], WY: [3, 3], SD: [3, 4], IA: [3, 5], IN: [3, 6], OH: [3, 7], PA: [3, 8], NJ: [3, 9], CT: [3, 10],
+  CA: [4, 1], UT: [4, 2], CO: [4, 3], NE: [4, 4], MO: [4, 5], KY: [4, 6], WV: [4, 7], VA: [4, 8], MD: [4, 9], DE: [4, 10],
+  AZ: [5, 2], NM: [5, 3], KS: [5, 4], AR: [5, 5], TN: [5, 6], NC: [5, 7], SC: [5, 8], DC: [5, 9],
+  OK: [6, 4], LA: [6, 5], MS: [6, 6], AL: [6, 7], GA: [6, 8],
+  HI: [7, 0], TX: [7, 4], FL: [7, 9],
+};
+export const STATE_NAMES = {
+  AK: 'Alaska', AL: 'Alabama', AR: 'Arkansas', AZ: 'Arizona', CA: 'California', CO: 'Colorado', CT: 'Connecticut',
+  DC: 'Washington, DC', DE: 'Delaware', FL: 'Florida', GA: 'Georgia', HI: 'Hawaii', IA: 'Iowa', ID: 'Idaho',
+  IL: 'Illinois', IN: 'Indiana', KS: 'Kansas', KY: 'Kentucky', LA: 'Louisiana', MA: 'Massachusetts', MD: 'Maryland',
+  ME: 'Maine', MI: 'Michigan', MN: 'Minnesota', MO: 'Missouri', MS: 'Mississippi', MT: 'Montana', NC: 'North Carolina',
+  ND: 'North Dakota', NE: 'Nebraska', NH: 'New Hampshire', NJ: 'New Jersey', NM: 'New Mexico', NV: 'Nevada',
+  NY: 'New York', OH: 'Ohio', OK: 'Oklahoma', OR: 'Oregon', PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina',
+  SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas', UT: 'Utah', VA: 'Virginia', VT: 'Vermont', WA: 'Washington',
+  WI: 'Wisconsin', WV: 'West Virginia', WY: 'Wyoming',
+};
+// A state is named in the "most/least common" lines only on enough babies to mean it: a
+// "most" needs this many actually given the name there (828 Brighams in Utah, where the US
+// rate gives 20, is a pattern; 3 against 1 is one family), a "least" needs the US rate to
+// have given it this many (none of an expected 4 says nothing).
+export const MIN_BABIES = 30;
+// Shade bands on the ratio, symmetric on a log scale: [upper bound, class].
+export const BANDS = [[0.5, 'q0'], [0.8, 'q1'], [1.25, 'q2'], [2, 'q3'], [4, 'q4'], [Infinity, 'q5']];
+export const BAND_LABELS = ['under ½×', '½–0.8×', 'about the US rate', '1.25–2×', '2–4×', '4× or more'];
+
+// The SSA withholds a name given to under five babies of a sex in a state in a year, so
+// each year a state lists none of a name may hide up to this many.
+export const WITHHELD_MAX = 4;
+
+// [a.., e.., w..] in `states` order -> one row per state: a babies listed, e what the US rate
+// would give, w years the state lists none while the US lists some. ratio = a / e; hi = the
+// most it can be once every withheld year is counted at its maximum. Both null when the US
+// rate would have given the state under one baby.
+export function whereRows(packed, states) {
+  const n = states.length;
+  if (!packed || packed.length !== 3 * n) return null;
+  return states.map((st, i) => {
+    const a = packed[i], e = packed[n + i], w = packed[2 * n + i];
+    return { st, a, e, w, ratio: e >= 1 ? a / e : null, hi: e >= 1 ? (a + WITHHELD_MAX * w) / e : null };
+  });
+}
+
+export const band = (ratio) => (ratio == null ? 'na' : BANDS.find(([hi]) => ratio < hi)[1]);
+// A map tile's shade. Below the US rate it is shaded only if even the upper bound is: a state
+// that lists few only because each year had under five could be anywhere up to `hi`, so it
+// is shown as unknown rather than as rare.
+export const tileBand = (r) => (r.ratio != null && r.ratio < 0.8 && !(r.hi < 0.8) ? 'na' : band(r.ratio));
+
+// The k states where the name is most (or least) common for its era, among those with
+// enough babies to say so. "Least" is judged at the upper bound `hi`, so a state that lists
+// none only because each year had under five is not called rare. Ties go to more babies,
+// then A-Z.
+export function extremes(rows, k = 3, min = MIN_BABIES) {
+  const ok = (rows || []).filter((r) => r.ratio != null);
+  const pick = (keep, key, dir) => ok.filter(keep)
+    .sort((x, y) => dir * (y[key] - x[key]) || y.a - x.a || (x.st < y.st ? -1 : 1)).slice(0, k);
+  return { most: pick((r) => r.ratio > 1 && r.a >= min, 'ratio', 1), least: pick((r) => r.hi < 1 && r.e >= min, 'hi', -1) };
+}
+
+// 61.5 -> "61×", 3.78 -> "3.8×", 0.44 -> "0.44×"
+export function fmtRatio(r) {
+  if (r == null) return '—';
+  if (r >= 10) return `${Math.round(r)}×`;
+  if (r >= 1) return `${r.toFixed(1)}×`;
+  return `${r.toFixed(2)}×`;
+}

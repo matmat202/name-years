@@ -177,6 +177,46 @@ eq('the query is cut at 120 characters', L.decodeState('?n=' + 'A'.repeat(118) +
 eq('no query is no names', L.decodeState('').names, []);
 eq('an empty n is no names', L.decodeState('?n=').names, []);
 
+// --- where (state files), made up ---------------------------------------------------------
+{
+  const st = ['AA', 'BB', 'CC', 'DD', 'EE'];
+  // a, then e, then w, in st order. CC has the top ratio on few babies; DD the top on many.
+  const A = [10, 600, 5, 400, 0], E = [100, 300, 1, 100, 50];
+  const rows = L.whereRows([...A, ...E, 0, 0, 0, 0, 0], st);
+  eq('whereRows pairs each state with its a, e and w', rows.map((r) => [r.st, r.a, r.e, r.w]), [['AA', 10, 100, 0], ['BB', 600, 300, 0], ['CC', 5, 1, 0], ['DD', 400, 100, 0], ['EE', 0, 50, 0]]);
+  eq('hi is the ratio when nothing is withheld', rows.map((r) => r.hi), rows.map((r) => r.ratio));
+  eq('ratios', rows.map((r) => r.ratio), [0.1, 2, 5, 4, 0]);
+  eq('a wrong-length record is no record', [L.whereRows([1, 2, 3], st), L.whereRows([...A, ...E], st)], [null, null]);
+  eq('an absent record is no record', L.whereRows(undefined, st), null);
+  eq('under one expected baby has no ratio', [L.whereRows([3, 0, 0.4, 1, 0, 0], ['XX', 'YY'])[0].ratio, L.whereRows([3, 0, 0.4, 1, 0, 0], ['XX', 'YY'])[0].hi], [null, null]);
+  // EE lists none, but over 20 years with none listed that could be 80, against 50 expected:
+  // not rare. AA's 5 withheld years could add 20: 30 of 100 is still rare.
+  const wh = L.whereRows([...A, ...E, 5, 0, 0, 0, 20], st);
+  eq('hi counts each withheld year at 4', [wh[0].hi, wh[4].hi], [0.3, 1.6]);
+  eq('least common is judged at the upper bound', L.extremes(wh, 3).least.map((r) => r.st), ['AA']);
+  eq('withholding does not change most common', L.extremes(wh, 3).most.map((r) => r.st), ['DD', 'BB']);
+  const x = L.extremes(rows, 3);
+  // CC (5x on 5 babies) is under MIN_BABIES; DD 4x beats BB 2x whatever order they came in.
+  eq('most common: by ratio, only on 30+ babies', x.most.map((r) => r.st), ['DD', 'BB']);
+  eq('least common: lowest first, only on 30+ expected', x.least.map((r) => r.st), ['EE', 'AA']);
+  const rev = L.extremes([...rows].reverse(), 3);
+  eq('order of the input does not matter', [rev.most.map((r) => r.st), rev.least.map((r) => r.st)], [['DD', 'BB'], ['EE', 'AA']]);
+  const tie = L.extremes(L.whereRows([60, 200, 40, 30, 100, 20, 0, 0, 0], ['PP', 'QQ', 'RR']), 3);
+  eq('a tie on ratio goes to more babies', tie.most.map((r) => r.st), ['QQ', 'PP', 'RR']);
+  eq('k caps the list', L.extremes(rows, 1).most.map((r) => r.st), ['DD']);
+  eq('bands at their edges', [0.49, 0.5, 0.79, 0.8, 1, 1.25, 1.99, 2, 3.99, 4, 60, null].map(L.band),
+    ['q0', 'q1', 'q1', 'q2', 'q2', 'q3', 'q3', 'q4', 'q4', 'q5', 'q5', 'na']);
+  eq('one label per band', L.BAND_LABELS.length, L.BANDS.length);
+  const tb = (a, e, w) => L.tileBand(L.whereRows([a, e, w], ['ZZ'])[0]);
+  eq('tiles: rare only if rare at the upper bound; common is never in doubt',
+    [tb(10, 100, 0), tb(10, 100, 10), tb(10, 100, 20), tb(70, 100, 0), tb(70, 100, 50), tb(300, 100, 30), tb(0, 0, 9)],
+    ['q0', 'q0', 'na', 'q1', 'na', 'q4', 'na']);
+  eq('fmtRatio', [61.5, 9.96, 3.78, 1, 0.444, null].map(L.fmtRatio), ['62×', '10.0×', '3.8×', '1.0×', '0.44×', '—']);
+  const cells = Object.values(L.TILES).map(String);
+  ok('51 tiles, no two on one cell', cells.length === 51 && new Set(cells).size === 51);
+  eq('every tile has a name', Object.keys(L.TILES).filter((k) => !L.STATE_NAMES[k]), []);
+}
+
 // --- the shipped data --------------------------------------------------------------------
 const here = fileURLToPath(new URL('.', import.meta.url));
 const M = JSON.parse(readFileSync(here + 'data/meta.json', 'utf8'));
@@ -243,6 +283,65 @@ eq('Mary was #1 for girls in 1880 (its best rank, first reached then)', get('Mar
   eq('Gertrude: 8% of all ever given it are alive', Math.round(100 * lv('Gertrude', 'F').share), 8);
 }
 ok('rising names grew from 50+ to 300+', ['F', 'M'].every((s) => M.rising[s].length && M.rising[s].every(([, now, then]) => now >= 300 && then >= 50 && now > then)));
+{
+  // The state shards. Facts from state/scratch/name-states/facts.py, an independent pass
+  // over the raw namesbystate.zip (csv module, its own expected-count loop).
+  const W = M.where;
+  eq('state files cover 1910-2025, 51 states with DC', [W.y0, W.y1, W.states.length], [1910, 2025, 51]);
+  eq('the state list is the tile list', [...W.states].sort(), Object.keys(L.TILES).sort());
+  const sf = readdirSync(here + 'data/s').filter((f) => f.endsWith('.json'));
+  const SS = {};
+  for (const f of sf) SS[f.slice(0, -5)] = JSON.parse(readFileSync(here + 'data/s/' + f, 'utf8'));
+  const where = (n, sex) => L.whereRows(SS[L.shardKey(n)]?.[n]?.[sex], W.states);
+  const at = (n, sex, st) => { const r = where(n, sex).find((x) => x.st === st); return [r.a, r.e]; };
+  const wOf = (n, sex, sts) => sts.map((st) => where(n, sex).find((x) => x.st === st).w);
+  eq('withheld years: Jose VT/NH/HI/UT 116/106/43/53, Leilani 105/103/3/79, Linda 75/70/61/42',
+    [wOf('Jose', 'M', ['VT', 'NH', 'HI', 'UT']), wOf('Leilani', 'F', ['VT', 'NH', 'HI', 'UT']), wOf('Linda', 'F', ['VT', 'NH', 'HI', 'UT'])],
+    [[116, 106, 43, 53], [105, 103, 3, 79], [75, 70, 61, 42]]);
+  ok('Leilani is not called rare in Vermont, where every year may hide four', !L.extremes(where('Leilani', 'F'), 51).least.some((r) => r.st === 'VT'));
+  // Brigham is the reason for the coverage rule: 46% of his births are in the state file
+  // (facts.py: Utah 828 against 20), the rest withheld in the states with under five a year.
+  eq('Brigham is not mapped: the state counts hold 46% of him', SS.br.Brigham.M, [46]);
+  eq('a thin record is no map', where('Brigham', 'M'), null);
+  eq('Jose, boys: Texas 170,769 (49,792), New Hampshire 63 (1,964)', [at('Jose', 'M', 'TX'), at('Jose', 'M', 'NH')], [[170769, 49792], [63, 1964]]);
+  eq('Leilani, girls: Hawaii 1,976 (113)', at('Leilani', 'F', 'HI'), [1976, 113]);
+  // The reason e is year-matched: over all years Linda looks rare in Nevada (0.44x), only
+  // because Nevada grew after her 1947 peak. For her own era she is a little common there.
+  eq('Linda, girls: Nevada 1,968 (1,577), California 114,963 (113,535)', [at('Linda', 'F', 'NV'), at('Linda', 'F', 'CA')], [[1968, 1577], [114963, 113535]]);
+  eq('Matthew, boys: New Hampshire 8,976 (5,776)', at('Matthew', 'M', 'NH'), [8976, 5776]);
+  eq('Leilani is most common in Hawaii', L.extremes(where('Leilani', 'F'), 1).most[0].st, 'HI');
+  eq('Jose: Texas, New Mexico, California top; New Hampshire among the least', [L.extremes(where('Jose', 'M')).most.map((r) => r.st).sort(), L.extremes(where('Jose', 'M'), 51).least.some((r) => r.st === 'NH')], [['CA', 'NM', 'TX'], true]);
+  // Every name's expected counts add up to its actual ones: the US rate shares out the
+  // same babies. Rounding moves each state by at most half a baby.
+  let n = 0, thin = 0, worst = 0, small = 0, misfiled = 0, overcover = [];
+  for (const [k, sh] of Object.entries(SS)) for (const [nm, rec] of Object.entries(sh)) {
+    if (L.shardKey(nm) !== k) misfiled++;
+    for (const sex of ['F', 'M']) if (rec[sex]) {
+      // coverage against the national shard, recomputed here: births since the state files begin
+      const nat = L.yearly(S[k]?.[nm]?.[sex], W.y0, W.y1).reduce((t, c) => t + c, 0);
+      if (rec[sex].length === 1) {
+        thin++;
+        if (!(rec[sex][0] < 100 * W.cover)) overcover.push(nm);
+        continue;
+      }
+      n++;
+      const rs = L.whereRows(rec[sex], W.states);
+      if (!rs) { overcover.push(nm + ' (bad record)'); continue; }
+      if (rs.reduce((t, r) => t + r.a, 0) < W.cover * nat) overcover.push(nm + ' (mapped under the cover)');
+      const A = rs.reduce((t, r) => t + r.a, 0), E = rs.reduce((t, r) => t + r.e, 0);
+      worst = Math.max(worst, Math.abs(A - E));
+      if (A < W.floor) small++;
+    }
+  }
+  ok('every name\'s expected counts sum to its actual ones (within rounding)', worst <= 26, worst);
+  eq(`no name under the ${W.floor}-baby floor`, small, 0);
+  eq('no state record in the wrong shard', misfiled, 0);
+  eq('every mapped name holds 90%+ of its US births in the state file; every thin one under it', overcover.slice(0, 5), []);
+  eq('mapped and thin lines, as meta counts them', [n, n + thin], [M.counts.whereMapped, M.counts.whereLines]);
+  ok('over 1,500 name lines mapped', n > 1500, n);
+  ok('every state shard has a name shard (the page fetches both by the same key)', sf.every((f) => files.includes(f)));
+  ok('the biggest state shard stays under 1 MB', Math.max(...sf.map((f) => readFileSync(here + 'data/s/' + f).length)) < 1e6);
+}
 ok('the biggest shard stays under 1 MB', Math.max(...files.map((f) => readFileSync(here + 'data/n/' + f).length)) < 1e6);
 
 console.log(`${fail ? 'FAILED' : 'ok'}: ${pass} passed, ${fail} failed`);

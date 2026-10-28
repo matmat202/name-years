@@ -1,6 +1,7 @@
 import {
   MAX_SERIES, shardKey, parseNames, lookup, prefixMatches, totalOf, seriesFor, seriesLabel,
   peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, encodeState, decodeState, SEX_WORD,
+  TILES, STATE_NAMES, BAND_LABELS, WITHHELD_MAX, whereRows, tileBand, extremes, fmtRatio,
 } from './names-logic.js';
 
 const $ = (id) => document.getElementById(id);
@@ -13,6 +14,7 @@ const M = { l: 46, r: 96, t: 12, b: 28 };
 
 let META = null;
 const shards = new Map(); // key -> Promise<shard>
+const sshards = new Map(); // key -> Promise<state shard>
 const state = { names: [], unit: 'rate' };
 let current = []; // series, in slot order
 let runId = 0;
@@ -29,20 +31,22 @@ function setStatus(msg, err = false) {
   $('status').classList.toggle('err', err);
 }
 
-function shard(name) {
+function shard(name, dir = 'n', cache = shards) {
   const k = shardKey(name);
   if (!/^[a-z]{2}$/.test(k)) return Promise.resolve(null);
-  if (!shards.has(k)) {
-    shards.set(k, fetch(`data/n/${k}.json`).then((r) => {
+  if (!cache.has(k)) {
+    cache.set(k, fetch(`data/${dir}/${k}.json`).then((r) => {
       if (r.status === 404) return {}; // no name starts with these two letters
       if (!r.ok) throw new Error(r.status);
       return r.json();
     }));
   }
-  const p = shards.get(k);
-  p.catch(() => shards.delete(k)); // a failed fetch may be retried
+  const p = cache.get(k);
+  p.catch(() => cache.delete(k)); // a failed fetch may be retried
   return p;
 }
+// The state counts are a second look: if they fail to load, the chart still shows.
+const stateShard = (name) => shard(name, 's', sshards).catch(() => undefined);
 
 async function show(names, { push = true } = {}) {
   const id = ++runId;
@@ -51,12 +55,20 @@ async function show(names, { push = true } = {}) {
   closeOpts();
   if (!names.length) { current = []; draw(); setStatus('Type a name to chart it.'); return; }
   let got;
-  try { got = await Promise.all(names.map(async (n) => { const sh = await shard(n); const k = lookup(sh, n); return { typed: n, k, rec: k && sh[k] }; })); }
+  try {
+    got = await Promise.all(names.map(async (n) => {
+      const [sh, ss] = await Promise.all([shard(n), stateShard(n)]);
+      const k = lookup(sh, n);
+      return { typed: n, k, rec: k && sh[k], where: ss === undefined ? undefined : (k && ss?.[k]) || {} };
+    }));
+  }
   catch { if (id === runId) setStatus('Could not load the names. Try reloading.', true); return; }
   if (id !== runId) return; // a newer search started meanwhile
   const found = got.filter((g) => g.rec);
   const missing = got.filter((g) => !g.rec).map((g) => `“${g.typed}”`);
-  const series = found.flatMap((g) => seriesFor(g.k, g.rec, META));
+  const series = found.flatMap((g) => seriesFor(g.k, g.rec, META)
+    .map((s) => ({ ...s, where: g.where === undefined ? undefined : whereRows(g.where[s.sex], META.where.states),
+      cover: g.where?.[s.sex]?.length === 1 ? g.where[s.sex][0] : null })));
   current = series.slice(0, MAX_SERIES).map((s, i) => ({ ...s, slot: i }));
   state.names = found.map((g) => g.k);
   $('q').value = state.names.join(', ');
@@ -190,14 +202,72 @@ function drawFacts() {
       ['Half of those alive born by', lv.median == null ? '—' : `${lv.median}: they turn ${lv.age} in ${META.asof}`],
       ['Since 1880', `${fmtInt(s.total)} ${SEX_WORD[s.sex]}`],
     ];
+    const W = META.where;
+    if (s.where === undefined) rows.push(['By state', 'could not load the state counts']);
+    else if (s.cover != null) rows.push(['By state', `the state counts hold only ${s.cover}% of these ${SEX_WORD[s.sex]} (the rest are withheld wherever a state had under five in a year): too thin to map fairly`]);
+    else if (!s.where) rows.push(['By state', `under ${fmtInt(W.floor)} ${SEX_WORD[s.sex]} in the state counts since ${W.y0}: too few to map`]);
+    else {
+      const x = extremes(s.where);
+      const list = (rs, f) => rs.map((r) => `${STATE_NAMES[r.st]} ${f(r)}`).join(', ') || '—';
+      rows.push(['Most common in', list(x.most, (r) => fmtRatio(r.ratio))],
+        ['Least common in', list(x.least, (r) => (r.w ? `at most ${fmtRatio(r.hi)}` : fmtRatio(r.ratio)))]);
+    }
     for (const [k, v] of rows) {
       const dt = document.createElement('dt'); dt.textContent = k;
       const dd = document.createElement('dd'); dd.textContent = v;
       dl.append(dt, dd);
     }
     li.append(h, dl);
+    if (s.where) li.append(drawMap(s));
     ul.append(li);
   }
+}
+
+// Each state's babies with the name against what the US rate of the same years would give
+// it, so a name is "common in Nevada" for its own era, not because Nevada grew later.
+function drawMap(s) {
+  const W = META.where;
+  const fig = document.createElement('figure');
+  fig.className = 'where';
+  const x = extremes(s.where, 1);
+  const grid = document.createElement('div');
+  grid.className = 'tiles';
+  grid.setAttribute('role', 'img');
+  grid.setAttribute('aria-label', `Map of US states: ${seriesLabel(s)} against the US rate, ${W.y0}–${W.y1}.`
+    + (x.most[0] ? ` Most common in ${STATE_NAMES[x.most[0].st]}, ${fmtRatio(x.most[0].ratio)} the US rate.` : ''));
+  const pick = document.createElement('p');
+  pick.className = 'pick';
+  pick.setAttribute('aria-live', 'polite');
+  for (const r of s.where) {
+    const t = document.createElement('button');
+    t.type = 'button';
+    const [row, col] = TILES[r.st];
+    t.className = `t ${tileBand(r)}`;
+    t.style.gridArea = `${row + 1} / ${col + 1}`;
+    t.textContent = r.st;
+    t.title = `${STATE_NAMES[r.st]}: ${fmtInt(r.a)} ${SEX_WORD[s.sex]}, ${r.ratio == null ? 'too few to compare' : `${fmtRatio(r.ratio)} the US rate`}`;
+    t.addEventListener('click', () => {
+      pick.textContent = `${t.title} (the US rate would give ${fmtInt(r.e)})`
+        + (r.w ? `; ${r.w} year${r.w === 1 ? '' : 's'} with none listed, each of which may hide up to ${WITHHELD_MAX}.` : '.');
+    });
+    grid.append(t);
+  }
+  const key = document.createElement('ul');
+  key.className = 'key';
+  BAND_LABELS.forEach((lab, i) => {
+    const k = document.createElement('li');
+    k.innerHTML = `<span class="t q${i}"></span>`;
+    k.append(lab);
+    key.append(k);
+  });
+  const na = document.createElement('li');
+  na.innerHTML = '<span class="t na"></span>';
+  na.append('can’t tell: too few listed');
+  key.append(na);
+  const cap = document.createElement('figcaption');
+  cap.textContent = `${SEX_WORD[s.sex][0].toUpperCase() + SEX_WORD[s.sex].slice(1)} given the name in each state, ${W.y0}–${W.y1}, against what the US rate of the same years would give it. Tap a state for its count.`;
+  fig.append(grid, pick, key, cap);
+  return fig;
 }
 
 function drawTable() {
