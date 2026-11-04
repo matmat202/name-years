@@ -74,6 +74,7 @@ eq('any other f is off', L.decodeState('?n=James&f=yes').cmp, '');
   eq('frFor counts: null before 1900, zero where Insee lists none', f.counts, [null, null, 0, 10, 0, 5]);
   eq('frFor rate per 1,000 of the French file', f.rate, [null, null, 0, 5, 0, 10]);
   eq('frFor total and spellings', [f.total, f.spell], [15, ['Léo', 'Leo']]);
+  ok('frFor: the years before France are null, not undefined (JSON reads both as null)', f.counts[0] === null && f.counts[1] === null && f.rate[0] === null);
   eq('frFor peak is by rate, on the shared axis (1903, not 1901)', 1898 + L.peak(f.rate), 1903);
   eq('no French record: null', L.frFor({}, 'M', meta), null);
   eq('no fr in meta: null', L.frFor({ M: [1901, 1] }, 'M', { y0: 1898, y1: 1903 }), null);
@@ -236,6 +237,27 @@ eq('an empty n is no names', L.decodeState('?n=').names, []);
   const cells = Object.values(L.TILES).map(String);
   ok('51 tiles, no two on one cell', cells.length === 51 && new Set(cells).size === 51);
   eq('every tile has a name', Object.keys(L.TILES).filter((k) => !L.STATE_NAMES[k]), []);
+  // The map itself, drawn: a tile moved by one cell is a state drawn in the wrong place, and
+  // the uniqueness check above only sees it when it lands on another tile (mutwatch, 2026-11-03).
+  const grid = Array.from({ length: 8 }, () => Array(12).fill('..'));
+  for (const [stn, [r, c]] of Object.entries(L.TILES)) grid[r][c] = stn;
+  eq('the tile map', grid.map((r) => r.join(' ')), [
+    'AK .. .. .. .. .. .. .. .. .. .. ME',
+    '.. .. .. .. .. .. .. .. .. .. VT NH',
+    '.. WA ID MT ND MN IL WI MI NY RI MA',
+    '.. OR NV WY SD IA IN OH PA NJ CT ..',
+    '.. CA UT CO NE MO KY WV VA MD DE ..',
+    '.. .. AZ NM KS AR TN NC SC DC .. ..',
+    '.. .. .. .. OK LA MS AL GA .. .. ..',
+    'HI .. .. .. TX .. .. .. .. FL .. ..']);
+  // Every threshold on its exact value.
+  const edge = L.whereRows([30, 30, 45, 15, 30, 30, 0, 0, 0], ['AA', 'BB', 'CC']);  // ratios 2, 1, 1.5; e 15, 30, 30
+  eq('30 babies is enough for most common; a ratio of exactly 1 is not most', L.extremes(edge, 3).most.map((r) => r.st), ['AA', 'CC']);
+  const low = L.whereRows([10, 30, 10, 30, 30, 29, 0, 0, 0], ['AA', 'BB', 'CC']);  // e 30, 30, 29; hi 1/3, 1, 0.34
+  eq('30 expected is enough for least; hi of exactly 1 is not least', L.extremes(low, 3).least.map((r) => r.st), ['AA']);
+  eq('MIN_BABIES is 30', L.MIN_BABIES, 30);
+  eq('tiles at 0.8: a ratio of 0.8 is shaded, an upper bound of exactly 0.8 is not rare', [tb(8, 10, 1), tb(4, 10, 1)], ['q2', 'na']);
+  eq('fmtRatio at 10 and just above', [10, 10.5].map(L.fmtRatio), ['10×', '11×']);
 }
 
 // --- the shipped data --------------------------------------------------------------------
