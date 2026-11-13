@@ -478,5 +478,22 @@ ok('the biggest shard stays under 1 MB', Math.max(...files.map((f) => readFileSy
   ok('every E&W shard has a name shard', ef.every((f) => files.includes(f)));
 }
 
+// --- chart labels: a cut label must keep what tells two lines apart -------------------------
+{
+  const vis = (t) => t.replace(/\uFE0E/g, '');
+  const jb = { name: 'Jordan', sex: 'M', both: true }, jg = { name: 'Jordan', sex: 'F', both: true };
+  eq('a label that fits is the full label', vis(L.chartLabel(jb, 15)), 'Jordan (boys)');
+  const n = [jb, jg].map((s) => vis(L.chartLabel(s, 11)));
+  eq('on a phone a two-sex name keeps its sex as a sign', n, ['Jordan \u2642', 'Jordan \u2640']);
+  ok('and the two labels differ', n[0] !== n[1]);
+  eq('the country falls back to its code before the name is cut', vis(L.chartLabel(jg, 15, ' · France', ' FR')), 'Jordan \u2640 FR');
+  const long = { name: 'Christopher', sex: 'M', both: true };
+  const cut = vis(L.chartLabel(long, 11, ' FR', ' FR'));
+  eq('a long two-sex name is cut in the name, keeping sign and code', cut, 'Chris… \u2642 FR');
+  ok('no label is wider than its cap', [jb, jg, long, { name: 'Maximiliano', sex: 'M', both: false }]
+    .every((s) => [11, 15].every((c) => [...vis(L.chartLabel(s, c, ' FR'))].length <= c)));
+  eq('a one-sex name that fits is untouched', L.chartLabel({ name: 'Linda', sex: 'F', both: false }, 11), 'Linda');
+}
+
 console.log(`${fail ? 'FAILED' : 'ok'}: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -1,5 +1,5 @@
 import {
-  MAX_SERIES, shardKey, parseNames, lookup, prefixMatches, totalOf, seriesFor, seriesLabel,
+  MAX_SERIES, shardKey, parseNames, lookup, prefixMatches, totalOf, seriesFor, seriesLabel, chartLabel,
   peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, encodeState, decodeState, SEX_WORD, abroadFor, spellNote, COUNTRIES,
   TILES, STATE_NAMES, BAND_LABELS, WITHHELD_MAX, whereRows, tileBand, extremes, fmtRatio,
 } from './names-logic.js';
@@ -149,9 +149,9 @@ function draw() {
   const over = labels.length ? labels[labels.length - 1].y - (H - M.b) : 0;
   if (over > 0) for (const l of labels) l.y -= over;
   for (const l of labels) {
-    const t = l.fr ? `${seriesLabel(l.s)}${narrow ? ' ' + C().short : ' · ' + C().label}` : seriesLabel(l.s);
     const cap = narrow ? 11 : 15;
-    svg.append(el('text', { x: W - M.r + 8, y: l.y + 4, class: 'lab' }, t.length > cap ? t.slice(0, cap - 1) + '…' : t));
+    const t = l.fr ? chartLabel(l.s, cap, narrow ? ' ' + C().short : ' · ' + C().label, ' ' + C().short) : chartLabel(l.s, cap);
+    svg.append(el('text', { x: W - M.r + 8, y: l.y + 4, class: 'lab' }, t));
   }
 
   const cross = el('line', { class: 'cross', y1: M.t, y2: M.t + ih, x1: -10, x2: -10, visibility: 'hidden' });

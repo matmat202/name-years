@@ -114,6 +114,20 @@ export function seriesFor(name, rec, meta) {
 
 export const seriesLabel = (s) => (s.both ? `${s.name} (${SEX_WORD[s.sex]})` : s.name);
 
+// The chart's end-of-line label, at most `cap` characters. Cutting the tail of "Jordan (boys)"
+// left "Jordan (bo…" and "Jordan (gi…", the one part that told the two lines apart, so a label
+// that does not fit shortens the sex to a sign and the country to its code first, and only
+// then shortens the name. U+FE0E keeps the signs as text, not emoji; it takes no width.
+const SEX_SIGN = { F: '\u2640\uFE0E', M: '\u2642\uFE0E' };
+const width = (t) => [...t.replace(/\uFE0E/g, '')].length;
+export function chartLabel(s, cap, tag = '', shortTag = tag) {
+  const sex = s.both ? ' ' + SEX_SIGN[s.sex] : '';
+  const fits = [seriesLabel(s) + tag, s.name + sex + tag, s.name + sex + shortTag].find((t) => width(t) <= cap);
+  if (fits) return fits;
+  const tail = sex + shortTag;
+  return [...s.name].slice(0, Math.max(1, cap - width(tail) - 1)).join('') + '…' + tail;
+}
+
 export function niceTicks(max) {
   if (!(max > 0)) return [0, 1];
   const raw = max / 4;
