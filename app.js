@@ -1,6 +1,6 @@
 import {
   MAX_SERIES, shardKey, parseNames, lookup, prefixMatches, totalOf, seriesFor, seriesLabel, chartLabel,
-  peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, encodeState, decodeState, SEX_WORD, abroadFor, spellNote, COUNTRIES,
+  peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, stackLabels, encodeState, decodeState, SEX_WORD, abroadFor, spellNote, COUNTRIES,
   TILES, STATE_NAMES, BAND_LABELS, WITHHELD_MAX, whereRows, tileBand, extremes, fmtRatio,
 } from './names-logic.js';
 
@@ -103,7 +103,7 @@ function draw() {
   W = Math.max(300, Math.min(900, box.clientWidth || 720));
   const narrow = W < 520;
   H = narrow ? 250 : 320;
-  M.r = narrow ? 78 : 104;
+  M.r = narrow ? 85 : 111;
   const iw = W - M.l - M.r, ih = H - M.t - M.b;
   const max = Math.max(0, ...current.flatMap(vals), ...frLines().flatMap((s) => frVals(s).filter((v) => v != null)));
   const ticks = niceTicks(max);
@@ -143,16 +143,17 @@ function draw() {
     svg.append(el('path', { d, class: 'ln fr', stroke: COLORS[s.slot] }));
     if (lastI >= 0) labels.push({ s, fr: true, y: y(v[lastI]) });
   }
-  // Direct labels at the right end, pushed apart so lines ending close don't overprint.
-  labels.sort((a, b) => a.y - b.y);
-  for (let i = 1; i < labels.length; i++) labels[i].y = Math.max(labels[i].y, labels[i - 1].y + 14);
-  const over = labels.length ? labels[labels.length - 1].y - (H - M.b) : 0;
-  if (over > 0) for (const l of labels) l.y -= over;
-  for (const l of labels) {
+  // Direct labels at the right end, moved apart only where lines end close. A moved label no
+  // longer sits on its line (seven crowd at the baseline with two two-sex names and France), so
+  // each carries a short sample of its line, colour and dash, as the cards' swatches do.
+  const placed = stackLabels(labels.map((l) => l.y), 14, M.t, H - M.b);
+  labels.forEach((l, i) => {
     const cap = narrow ? 11 : 15;
     const t = l.fr ? chartLabel(l.s, cap, narrow ? ' ' + C().short : ' · ' + C().label, ' ' + C().short) : chartLabel(l.s, cap);
-    svg.append(el('text', { x: W - M.r + 8, y: l.y + 4, class: 'lab' }, t));
-  }
+    const ky = placed[i].toFixed(1);
+    svg.append(el('path', { d: `M${W - M.r + 4},${ky}H${W - M.r + 12}`, class: l.fr ? 'key fr' : 'key', stroke: COLORS[l.s.slot] }));
+    svg.append(el('text', { x: W - M.r + 15, y: placed[i] + 4, class: 'lab' }, t));
+  });
 
   const cross = el('line', { class: 'cross', y1: M.t, y2: M.t + ih, x1: -10, x2: -10, visibility: 'hidden' });
   const dots = el('g');

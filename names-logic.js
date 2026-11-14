@@ -128,6 +128,35 @@ export function chartLabel(s, cap, tag = '', shortTag = tag) {
   return [...s.name].slice(0, Math.max(1, cap - width(tail) - 1)).join('') + '…' + tail;
 }
 
+// End labels, at least `gap` apart and inside [lo, hi], each as near its line's end as the
+// others allow. The first version pushed each label down past the one above, then shifted the
+// whole stack up if it ran off the bottom, so one crowd near zero dragged every label with it:
+// with Jordan, Taylor and France on at 390 wide, a label for a line ending at 8 sat beside 2.
+// Here overlapping labels merge into a block centred on their lines, and only the block moves.
+// Returns the placed ys in the order given.
+export function stackLabels(ys, gap, lo = -Infinity, hi = Infinity) {
+  const order = ys.map((y, i) => i).sort((a, b) => ys[a] - ys[b]);
+  const blocks = [];
+  const place = (b) => {
+    const want = b.items.reduce((t, i, k) => t + ys[i] - k * gap, 0) / b.items.length;
+    b.top = Math.max(lo, Math.min(hi - (b.items.length - 1) * gap, want));
+  };
+  for (const i of order) {
+    const b = { items: [i] };
+    place(b);
+    blocks.push(b);
+    while (blocks.length > 1) {
+      const prev = blocks[blocks.length - 2], cur = blocks[blocks.length - 1];
+      if (prev.top + prev.items.length * gap <= cur.top + 1e-9) break;
+      blocks.splice(-2, 2, { items: prev.items.concat(cur.items) });
+      place(blocks[blocks.length - 1]);
+    }
+  }
+  const out = new Array(ys.length);
+  for (const b of blocks) b.items.forEach((i, k) => { out[i] = b.top + k * gap; });
+  return out;
+}
+
 export function niceTicks(max) {
   if (!(max > 0)) return [0, 1];
   const raw = max / 4;

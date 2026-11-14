@@ -495,5 +495,22 @@ ok('the biggest shard stays under 1 MB', Math.max(...files.map((f) => readFileSy
   eq('a one-sex name that fits is untouched', L.chartLabel({ name: 'Linda', sex: 'F', both: false }, 11), 'Linda');
 }
 
+// --- end labels: stacked apart, but only the crowded ones move -------------------------------
+{
+  const S = (ys, lo, hi) => L.stackLabels(ys, 14, lo, hi).map((v) => +v.toFixed(6));
+  eq('labels already apart stay on their lines', S([10, 50, 100], 0, 200), [10, 50, 100]);
+  eq('two colliding labels part evenly about their lines', S([100, 104], 0, 200), [95, 109]);
+  eq('the order given is the order returned', S([104, 100], 0, 200), [109, 95]);
+  // the 390-wide Jordan, Taylor + France case: one line ends high, six crowd at the baseline
+  const crowd = S([60, 196, 197, 198, 199, 199, 200], 0, 200);
+  eq('a crowd at the bottom does not drag a far label with it', crowd[0], 60);
+  ok('the crowd keeps 14 apart and stays inside the chart',
+    crowd.slice(1).every((y, k, a) => (k === 0 || y - a[k - 1] >= 14 - 1e-6) && y <= 200), JSON.stringify(crowd));
+  eq('the crowd sits against the bottom', crowd[6], 200);
+  eq('a block pushed into a label above merges with it', S([165, 190, 195, 200], 0, 200), [158, 172, 186, 200]);
+  eq('the top bound holds too', S([0, 1], 5, 200), [5, 19]);
+  eq('no labels, no positions', S([], 0, 200), []);
+}
+
 console.log(`${fail ? 'FAILED' : 'ok'}: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
