@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A Name of Your Own · how American first names stopped being shared</title>
+<meta name="description" content="A scrolling story from Social Security records: in 1950 a third of American boys got one of that year's ten commonest names; now it is 8%. Not faster fads, and not just new spellings — just many more names at once.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="plot" aria-hidden="true"><div id="axes"></div></div>
+<canvas id="gl" aria-hidden="true"></canvas>
+<p id="err" role="alert"></p>
+<main>
+
+<section class="step" data-kind="field"><div>
+  <p class="kicker">Name Years · a story</p>
+  <h1>A name of your own</h1>
+  <p>Social Security keeps a count of every first name given to five or more American babies
+  in a year. In <b data-fact="last"></b> that was <b data-fact="births:last:F"></b> girls and
+  <b data-fact="births:last:M"></b> boys. This story follows how those names got shared out,
+  from <b data-fact="first"></b> to now.</p>
+  <p class="small">Scroll ↓</p>
+</div></section>
+
+<section class="step" data-kind="sex"><div>
+  <p class="kicker">How to read it</p>
+  <h2>A hundred girls and a hundred boys</h2>
+  <p>Each column is one year: <b data-fact="per"></b> <span class="w girl">girls</span> on
+  the left, <b data-fact="per"></b> <span class="w boy">boys</span> on the right, as if
+  picked at random from every baby born that year. The same dot is the same baby all the
+  way down.</p>
+</div></section>
+
+<section class="step" data-kind="top10"><div>
+  <p class="kicker">Chapter 1 · The ten</p>
+  <h2>A third of the boys had ten names</h2>
+  <p>In 1950, <b data-fact="top10:1950:M"></b> of boys were given one of that year's
+  <span class="w t10">ten most common names</span> — James, Robert, John, Michael, David —
+  and so were <b data-fact="top10:1950:F"></b> of girls. The commonest,
+  <b data-fact="name1:1950:F"></b>, went to <b data-fact="name1share:1950:F"></b> of all
+  girls born that year.</p>
+  <p>In <b data-fact="last"></b> the top ten covered <b data-fact="top10:last:M"></b> of
+  boys and <b data-fact="top10:last:F"></b> of girls. <b data-fact="name1:last:F"></b>, the
+  most popular girl's name, went to <b data-fact="name1share:last:F"></b>.</p>
+</div></section>
+
+<section class="step" data-kind="top100"><div>
+  <p class="kicker">Chapter 2 · The hundred</p>
+  <h2>Even the top hundred lost its grip</h2>
+  <p>Widen it to the <span class="w t100">hundred most common names</span>. In 1950 they
+  covered <b data-fact="top100:1950:M"></b> of boys and <b data-fact="top100:1950:F"></b> of
+  girls: most of a classroom. In <b data-fact="last"></b>, <b data-fact="top100:last:M"></b>
+  and <b data-fact="top100:last:F"></b>.</p>
+</div></section>
+
+<section class="step" data-kind="half"><div>
+  <p class="kicker">Chapter 3 · Half the babies</p>
+  <h2>From 23 names to 178</h2>
+  <p>Another way to count it: how many names does it take to cover half the boys born in a
+  year? In 1950, <b data-fact="half:1950:M"></b>. In <b data-fact="last"></b>,
+  <b data-fact="half:last:M"></b>. For girls, <b data-fact="half:1950:F"></b> then and
+  <b data-fact="half:last:F"></b> now.</p>
+  <p>The record lists <b data-fact="names:last:F"></b> different girls' names for
+  <b data-fact="last"></b>, against <b data-fact="names:1950:F"></b> in 1950.</p>
+</div></section>
+
+<section class="step" data-kind="class"><div>
+  <p class="kicker">Chapter 4 · The classroom</p>
+  <h2>The other Jennifer</h2>
+  <p>Put 25 children in a class, about <b data-fact="mates"></b> of them your sex besides
+  you. For a boy born in 1950, the chance that one of them had his exact name was
+  <b data-fact="cls:1950:M"></b> — <b data-fact="clsodds:1950:M"></b>. For a boy born in
+  <b data-fact="last"></b> it is <b data-fact="cls:last:M"></b>, and for a girl
+  <b data-fact="cls:last:F"></b>.</p>
+  <p class="small">This draws classmates from the whole country. Real classes are local,
+  and names cluster by place, so the true chances are higher; the fall is the point.</p>
+</div></section>
+
+<section class="step" data-kind="bysex"><div>
+  <p class="kicker">Chapter 5 · Boys and girls</p>
+  <h2>Boys were the conservative ones</h2>
+  <p>Look at the two halves of each column. In 1950 a <span class="w boy">boy</span> was
+  <b data-fact="boyratio:1950"></b> as likely as a <span class="w girl">girl</span> to get a
+  top-ten name.</p>
+  <p>That gap is gone. In <b data-fact="last"></b> the ratio is
+  <b data-fact="boyratio:last"></b>.</p>
+</div></section>
+
+<section class="step" data-kind="sdx"><div>
+  <p class="kicker">Chapter 6 · Is it just spelling?</p>
+  <h2>Aiden, Aidan, Ayden</h2>
+  <p>Some of this is spelling. The record counts Jackson, Jaxon and Jaxson as three names.
+  So count again with every set of names that <em>sound</em> alike folded into one, by the
+  old Soundex code — which folds too much, merging Mary with Marie and Mark with Marco.</p>
+  <p>Even so, the boy's chance of a namesake in class falls from
+  <b data-fact="sdxcls:1950:M"></b> in 1950 to <b data-fact="sdxcls:last:M"></b> now, and
+  the top ten sounds cover <b data-fact="sdxtop10:last:M"></b> of boys. Folding
+  spellings fattens every year's count a little; the chance still falls by more than half,
+  for girls and for boys.</p>
+</div></section>
+
+<section class="step" data-kind="hits"><div>
+  <p class="kicker">Chapter 7 · What did not change</p>
+  <h2>Fads are not faster</h2>
+  <p>It feels as if names now flare and die quicker. They do not. Take the
+  <b data-fact="hitsn"></b> names that were in their year's top twenty at their peak,
+  for peaks from 1930 to 2009. In every decade from the 1940s to the 2000s, the typical hit
+  took between <b data-fact="risemin"></b> and <b data-fact="risemax"></b> years to climb
+  from a quarter of its peak to the top, and fifteen years later still held
+  <b data-fact="keptmin"></b> to <b data-fact="keptmax"></b> of its peak share.</p>
+  <p>A name rises and falls at about the speed it always did. What changed is how many
+  names are rising at once.</p>
+  <p class="small">A first count said the opposite — that hits had grown far shorter-lived. That count kept only names that had already faded, which recent names have
+  not had time to do.</p>
+</div></section>
+
+<section class="step" data-kind="top10"><div>
+  <p class="kicker">Coda · Your name</p>
+  <h2>Where is yours?</h2>
+  <p>Type any first name into <a href="../">Name Years</a> to see how many babies got it
+  every year since 1880, when it peaked, and how old the people who have it are now.</p>
+  <p class="small">Counts are the Social Security Administration's national baby-name file,
+  which lists a name only if at least five babies of a sex got it in a year; shares here are
+  of the babies it lists, so the rarest names are left out of both sides, and leaving them
+  out understates how spread out recent names are. The story starts at 1940 because records
+  for earlier births come from people who applied for a card later in life. Ranks are by
+  exact spelling; the Soundex count is in chapter 6. Hits are names in their own peak
+  year's top twenty, per sex, with peaks from 1930 to 2009 so that each has fifteen years of
+  record after its peak.</p>
+</div></section>
+
+</main>
+<script type="module" src="story.js"></script>
+</body>
+</html>
