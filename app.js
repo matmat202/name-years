@@ -208,6 +208,9 @@ function draw() {
   drawTable();
 }
 
+const NARROW = matchMedia('(max-width: 599px)');
+let moreOpen = null; // the reader's last open/close of a card's disclosure, kept across redraws
+
 function drawFacts() {
   const ul = $('facts');
   ul.replaceChildren();
@@ -232,25 +235,41 @@ function drawFacts() {
       ['Half of those alive born by', lv.median == null ? '—' : `${lv.median}: they turn ${lv.age} in ${META.asof}`],
       ['Since 1880', `${fmtInt(s.total)} ${SEX_WORD[s.sex]}`],
     ];
-    for (const c of COUNTRIES) rows.push(...abroadRows(s, c));
+    // Abroad and by state sit behind a disclosure: at 390 px they made each card ~710 px tall,
+    // four of them 2,854 px, before the table. Open from the start where the cards sit side by side.
+    const more = [];
+    for (const c of COUNTRIES) more.push(...abroadRows(s, c));
     const W = META.where;
-    if (s.where === undefined) rows.push(['By state', 'could not load the state counts']);
-    else if (s.cover != null) rows.push(['By state', `the state counts hold only ${s.cover}% of these ${SEX_WORD[s.sex]} (the rest are withheld wherever a state had under five in a year): too thin to map fairly`]);
-    else if (!s.where) rows.push(['By state', `under ${fmtInt(W.floor)} ${SEX_WORD[s.sex]} in the state counts since ${W.y0}: too few to map`]);
+    if (s.where === undefined) more.push(['By state', 'could not load the state counts']);
+    else if (s.cover != null) more.push(['By state', `the state counts hold only ${s.cover}% of these ${SEX_WORD[s.sex]} (the rest are withheld wherever a state had under five in a year): too thin to map fairly`]);
+    else if (!s.where) more.push(['By state', `under ${fmtInt(W.floor)} ${SEX_WORD[s.sex]} in the state counts since ${W.y0}: too few to map`]);
     else {
       const x = extremes(s.where);
       const list = (rs, f) => rs.map((r) => `${STATE_NAMES[r.st]} ${f(r)}`).join(', ') || '—';
-      rows.push(['Most common in', list(x.most, (r) => fmtRatio(r.ratio))],
+      more.push(['Most common in', list(x.most, (r) => fmtRatio(r.ratio))],
         ['Least common in', list(x.least, (r) => (r.w ? `at most ${fmtRatio(r.hi)}` : fmtRatio(r.ratio)))]);
     }
-    for (const [k, v] of rows) {
-      const dt = document.createElement('dt'); dt.textContent = k;
-      const dd = document.createElement('dd'); dd.textContent = v;
-      dl.append(dt, dd);
-    }
-    li.append(h, dl);
-    if (s.where) li.append(drawMap(s));
+    fillDl(dl, rows);
+    const det = document.createElement('details');
+    det.className = 'more';
+    det.open = moreOpen ?? !NARROW.matches;
+    det.addEventListener('toggle', () => { moreOpen = det.open; });
+    const sum = document.createElement('summary');
+    sum.textContent = COUNTRIES.some((c) => META[c]) ? 'Abroad and by state' : 'By state';
+    const dl2 = document.createElement('dl');
+    fillDl(dl2, more);
+    det.append(sum, dl2);
+    if (s.where) det.append(drawMap(s));
+    li.append(h, dl, det);
     ul.append(li);
+  }
+}
+
+function fillDl(dl, rows) {
+  for (const [k, v] of rows) {
+    const dt = document.createElement('dt'); dt.textContent = k;
+    const dd = document.createElement('dd'); dd.textContent = v;
+    dl.append(dt, dd);
   }
 }
 
