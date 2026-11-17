@@ -59,12 +59,12 @@ eq('rates format', [0, 0.004, 0.25, 3.14159, 12.34].map(L.fmtRate), ['0', '<0.01
 eq('rank labels', [L.rankLabel(1), L.rankLabel(1204), L.rankLabel(0)], ['#1', '#1,204', 'unranked']);
 eq('state encodes with readable commas', L.encodeState({ names: ['Olivia', 'Emma'], unit: 'n' }), '?n=Olivia,Emma&u=n');
 eq('default state is empty', L.encodeState({ names: [], unit: 'rate' }), '');
-eq('state round-trips', L.decodeState(L.encodeState({ names: ['Olivia', 'Emma'], unit: 'n' })), { names: ['Olivia', 'Emma'], unit: 'n', cmp: '' });
-eq('the France choice round-trips', L.decodeState(L.encodeState({ names: ['James'], unit: 'rate', cmp: 'fr' })), { names: ['James'], unit: 'rate', cmp: 'fr' });
-eq('the England and Wales choice round-trips', L.decodeState(L.encodeState({ names: ['James'], unit: 'rate', cmp: 'ew' })), { names: ['James'], unit: 'rate', cmp: 'ew' });
+eq('state round-trips', L.decodeState(L.encodeState({ names: ['Olivia', 'Emma'], unit: 'n' })), { names: ['Olivia', 'Emma'], unit: 'n', cmp: '', year: null });
+eq('the France choice round-trips', L.decodeState(L.encodeState({ names: ['James'], unit: 'rate', cmp: 'fr' })), { names: ['James'], unit: 'rate', cmp: 'fr', year: null });
+eq('the England and Wales choice round-trips', L.decodeState(L.encodeState({ names: ['James'], unit: 'rate', cmp: 'ew' })), { names: ['James'], unit: 'rate', cmp: 'ew', year: null });
 eq('France on is still f=1 in the URL, so shared links keep working', L.encodeState({ names: ['James'], cmp: 'fr' }), '?n=James&f=1');
 eq('England and Wales is c=ew', L.encodeState({ names: ['James'], cmp: 'ew' }), '?n=James&c=ew');
-eq('an unknown country is ignored', L.decodeState('?n=James&c=xx'), { names: ['James'], unit: 'rate', cmp: '' });
+eq('an unknown country is ignored', L.decodeState('?n=James&c=xx'), { names: ['James'], unit: 'rate', cmp: '', year: null });
 eq('c= wins over a stale f=1', L.decodeState('?n=James&f=1&c=ew').cmp, 'ew');
 eq('any other f is off', L.decodeState('?n=James&f=yes').cmp, '');
 {
@@ -83,6 +83,19 @@ eq('any other f is off', L.decodeState('?n=James&f=yes').cmp, '');
   eq('spellNote shows a hyphen', L.spellNote('Jeanpierre', ['Jean-Pierre']), 'Jean-Pierre');
 }
 eq('unknown unit falls back', L.decodeState('?n=Al&u=evil').unit, 'rate');
+eq('a year rides in the URL as y=', L.encodeState({ names: ['Linda'], unit: 'rate', cmp: '', year: 1950 }), '?n=Linda&y=1950');
+eq('the year round-trips', L.decodeState('?n=Linda&y=1950').year, 1950);
+eq('a year that is not four digits is no year', ['?y=195', '?y=19500', '?y=1950x', '?y=-1950', '?y='].map((q) => L.decodeState(q).year), [null, null, null, null, null]);
+{
+  const m = { y0: 1880, y1: 2025 };
+  eq('yearIn keeps the file\'s years, edges included', [1880, 2025, 1950].map((y) => L.yearIn(y, m)), [1880, 2025, 1950]);
+  eq('yearIn drops the years outside it', [1879, 2026, null, NaN, 1950.5].map((y) => L.yearIn(y, m)), [null, null, null, null, null]);
+  const T = { y0: 1990, F: [['Ann', 30, 'Bea', 20], ['Cy', 9]], M: [[], []] };
+  const mt = { y0: 1989, tot: { F: [0, 1000, 3000], M: [0, 0, 0] } };
+  eq('topOfYear reads the pairs in order, per 1,000 of that year and sex', L.topOfYear(T, mt, 'F', 1990), [{ name: 'Ann', n: 30, rate: 30 }, { name: 'Bea', n: 20, rate: 20 }]);
+  eq('and the next year is the next row', L.topOfYear(T, mt, 'F', 1991), [{ name: 'Cy', n: 9, rate: 3 }]);
+  eq('a year outside the file, or no file, is an empty list', [L.topOfYear(T, mt, 'F', 1989), L.topOfYear(T, mt, 'F', 1992), L.topOfYear(undefined, mt, 'F', 1990)], [[], [], []]);
+}
 
 // --- lines bin/mutate found unguarded (2026-10-27) ---------------------------------------
 //
@@ -510,6 +523,38 @@ ok('the biggest shard stays under 1 MB', Math.max(...files.map((f) => readFileSy
   eq('a block pushed into a label above merges with it', S([165, 190, 195, 200], 0, 200), [158, 172, 186, 200]);
   eq('the top bound holds too', S([0, 1], 5, 200), [5, 19]);
   eq('no labels, no positions', S([], 0, 200), []);
+}
+
+// --- any year: data/years.json against the SSA's own files and against every shard ------------
+{
+  const T = JSON.parse(readFileSync(here + 'data/years.json', 'utf8'));
+  // Facts read off the yob files (unzip -p data/names.zip yob1950.txt | awk -F, '$2=="F"' | sort -t, -k3,3nr | head)
+  const top = (sex, y) => L.topOfYear(T, M, sex, y);
+  eq('1950: Linda, Mary, Patricia', top('F', 1950).slice(0, 3).map((r) => [r.name, r.n]), [['Linda', 80433], ['Mary', 65481], ['Patricia', 47944]]);
+  eq('1950: James, Robert, John', top('M', 1950).slice(0, 3).map((r) => [r.name, r.n]), [['James', 86228], ['Robert', 83553], ['John', 79412]]);
+  eq('1880 is the first row: Mary 7,065 and John 9,655', [top('F', 1880)[0], top('M', 1880)[0]].map((r) => [r.name, r.n]), [['Mary', 7065], ['John', 9655]]);
+  eq('1990: Jessica 46,486, Michael 65,321; Lauren tenth at 20,506', [top('F', 1990)[0], top('M', 1990)[0], top('F', 1990)[9]].map((r) => [r.name, r.n]), [['Jessica', 46486], ['Michael', 65321], ['Lauren', 20506]]);
+  eq('the last year\'s list starts with the "Top of" chip\'s names', [top('F', M.y1).map((r) => r.name), top('M', M.y1).map((r) => r.name)], [M.top.F, M.top.M]);
+  eq('one row per year of the file', [T.y0, T.F.length, T.M.length], [M.y0, M.y1 - M.y0 + 1, M.y1 - M.y0 + 1]);
+  // Every year's ten, recomputed from all 464 name shards: the most babies that year, ties by name.
+  let bad = 0, first = '';
+  for (const sex of ['F', 'M']) {
+    const by = Array.from({ length: M.y1 - M.y0 + 1 }, () => []);
+    for (const sh of Object.values(S)) for (const [name, rec] of Object.entries(sh)) {
+      if (!rec[sex]) continue;
+      L.yearly(rec[sex], M.y0, M.y1).forEach((c, i) => { if (c) by[i].push([name, c]); });
+    }
+    by.forEach((list, i) => {
+      list.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+      const want = list.slice(0, 10).map((r) => r[0] + ':' + r[1]).join();
+      const got = top(sex, M.y0 + i).map((r) => r.name + ':' + r.n).join();
+      if (want !== got) { bad++; first = first || `${sex} ${M.y0 + i}: got ${got} want ${want}`; }
+    });
+  }
+  eq('every year\'s ten agree with the name shards', bad, 0);
+  if (bad) console.log('  first:', first);
+  ok('the years file stays small (fetched when the panel opens)', readFileSync(here + 'data/years.json').length < 80e3);
+  ok('1950\'s #1 girl is a bigger share than 2025\'s', (top('F', 1950)[0]?.rate ?? 0) > 2 * (top('F', M.y1)[0]?.rate ?? Infinity), JSON.stringify([top('F', 1950)[0], top('F', M.y1)[0]]));
 }
 
 console.log(`${fail ? 'FAILED' : 'ok'}: ${pass} passed, ${fail} failed`);

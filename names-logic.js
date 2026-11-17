@@ -184,12 +184,13 @@ export const rankLabel = (r) => (r > 0 ? `#${fmtInt(r)}` : 'unranked');
 // ?n=Olivia,Emma&u=n&c=ew (c: the country whose lines are drawn beside the US ones; f=1 is
 // France's older spelling and still read). Unknown values fall back rather than throw.
 export const COUNTRIES = ['fr', 'ew'];
-export function encodeState({ names, unit, cmp }) {
+export function encodeState({ names, unit, cmp, year }) {
   const p = new URLSearchParams();
   if (names && names.length) p.set('n', names.join(','));
   if (unit === 'n') p.set('u', 'n');
   if (cmp === 'fr') p.set('f', '1');
   else if (COUNTRIES.includes(cmp)) p.set('c', cmp);
+  if (year) p.set('y', String(year));
   const s = p.toString().replace(/%2C/g, ',');
   return s ? `?${s}` : '';
 }
@@ -197,7 +198,24 @@ export function decodeState(search) {
   const p = new URLSearchParams(search);
   const c = p.get('c');
   return { names: parseNames((p.get('n') || '').slice(0, 120)), unit: p.get('u') === 'n' ? 'n' : 'rate',
-    cmp: COUNTRIES.includes(c) ? c : p.get('f') === '1' ? 'fr' : '' };
+    cmp: COUNTRIES.includes(c) ? c : p.get('f') === '1' ? 'fr' : '',
+    year: /^\d{4}$/.test(p.get('y') || '') ? +p.get('y') : null };
+}
+
+// --- any year: data/years.json -------------------------------------------------------
+// ?y=1950 opens the panel at 1950; a year the file does not have is no year (the page
+// then shows its last), never a crash or an empty list.
+export const yearIn = (y, meta) => (Number.isInteger(y) && y >= meta.y0 && y <= meta.y1 ? y : null);
+
+// One year's most given names of a sex: [{ name, n, rate }], rate per 1,000 babies of
+// that sex born that year, so 1950's #1 and 2025's can be set side by side.
+export function topOfYear(T, meta, sex, y) {
+  const row = T?.[sex]?.[y - T.y0];
+  if (!row) return [];
+  const tot = meta.tot[sex][y - meta.y0];
+  const out = [];
+  for (let i = 0; i + 1 < row.length; i += 2) out.push({ name: row[i], n: row[i + 1], rate: tot ? (1000 * row[i + 1]) / tot : 0 });
+  return out;
 }
 
 // --- where: the state files ----------------------------------------------------------

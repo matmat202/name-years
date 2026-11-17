@@ -89,6 +89,20 @@ ul.facts dt{color:var(--ink-2)}ul.facts dd{margin:0;font-variant-numeric:tabular
 details{margin:14px 0 0}
 ul.facts details.more{margin:6px 0 0}ul.facts details.more>summary{padding:4px 0}ul.facts details.more>dl{margin-top:4px}
 summary{cursor:pointer;font-size:13px;color:var(--ink-2)}
+.yrbar{display:flex;align-items:center;gap:6px;margin:8px 0 4px;font-size:13px;color:var(--ink-2)}
+.yrbar label{margin-right:2px}
+.yrbar select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+.yrbar .step{font:inherit;font-size:16px;line-height:1;width:34px;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);cursor:pointer}
+.yrbar .step:disabled{color:var(--ink-3);cursor:default;opacity:.5}
+.yrcols{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.yrcols h3{font-size:13px;margin:6px 0 2px;color:var(--ink-2)}
+.yrcols ol{margin:0;padding:0 0 0 1.9em;font-size:13px;font-variant-numeric:tabular-nums}
+.yrcols li{padding:1px 0}.yrcols li::marker{color:var(--ink-3)}
+.yrcols li button{font:inherit;width:100%;display:flex;justify-content:space-between;gap:6px;padding:4px 2px;border:0;background:none;color:var(--ink);cursor:pointer;text-align:left}
+.yrcols li button .n{color:var(--ink-2);font-size:12px}
+.yrcols li button:hover .nm,.yrcols li button.on .nm{color:var(--accent);text-decoration:underline}
+.yrcols li button .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.yrnote{font-size:12px;color:var(--ink-2);margin:6px 0 0;line-height:1.45}
 .tbl{max-height:420px;overflow:auto}
 .tbl table{border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;margin-top:6px;width:100%}
 .tbl th,.tbl td{padding:3px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
@@ -144,6 +158,20 @@ input,select,textarea{font-size:16px!important}
     <p class="yl" id="yl"></p>
   </section>
   <ul class="facts" id="facts"></ul>
+  <details id="yrs" class="yrs">
+    <summary>The ten most given names of any year</summary>
+    <div class="yrbar">
+      <label for="yr">Born in</label>
+      <button type="button" class="step" data-d="-1" aria-label="Year before">&lsaquo;</button>
+      <select id="yr"></select>
+      <button type="button" class="step" data-d="1" aria-label="Year after">&rsaquo;</button>
+    </div>
+    <div class="yrcols">
+      <section aria-labelledby="yrFh"><h3 id="yrFh">Girls</h3><ol id="yrF"></ol></section>
+      <section aria-labelledby="yrMh"><h3 id="yrMh">Boys</h3><ol id="yrM"></ol></section>
+    </div>
+    <p class="yrnote" id="yrnote"></p>
+  </details>
 
   <details>
     <summary>Every year, as a table</summary>

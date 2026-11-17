@@ -1,6 +1,6 @@
 import {
   MAX_SERIES, shardKey, parseNames, lookup, prefixMatches, totalOf, seriesFor, seriesLabel, chartLabel,
-  peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, stackLabels, encodeState, decodeState, SEX_WORD, abroadFor, spellNote, COUNTRIES,
+  peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, stackLabels, encodeState, decodeState, yearIn, topOfYear, SEX_WORD, abroadFor, spellNote, COUNTRIES,
   TILES, STATE_NAMES, BAND_LABELS, WITHHELD_MAX, whereRows, tileBand, extremes, fmtRatio,
 } from './names-logic.js';
 
@@ -20,7 +20,7 @@ const ABROAD = {
   fr: { name: 'France', short: 'FR', label: 'France', dir: 'f', src: 'Insee', cache: new Map() },
   ew: { name: 'England and Wales', short: 'E&W', label: 'E&W', dir: 'e', src: 'ONS', cache: new Map() },
 };
-const state = { names: [], unit: 'rate', cmp: '' };
+const state = { names: [], unit: 'rate', cmp: '', year: null };
 let current = []; // series, in slot order
 let runId = 0;
 
@@ -405,6 +405,57 @@ function pickOpt(i) {
   show(parseNames(parts.join(',')));
 }
 
+// --- the ten most given names of any year (data/years.json, fetched on first open) --------
+let years = null;
+const loadYears = () => (years ||= fetch('data/years.json').then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .catch((e) => { years = null; throw e; }));
+async function drawYear(y) {
+  state.year = y;
+  $('yr').value = String(y);
+  for (const b of document.querySelectorAll('#yrs .step')) b.disabled = !yearIn(y + +b.dataset.d, META);
+  history.replaceState(null, '', location.pathname + encodeState(state));
+  let T;
+  try { T = await loadYears(); }
+  catch { $('yrnote').textContent = 'Could not load the years. Try reloading.'; return; }
+  if (state.year !== y) return; // stepped on meanwhile
+  const shown = new Set(state.names);
+  for (const sex of ['F', 'M']) {
+    $('yr' + sex).replaceChildren(...topOfYear(T, META, sex, y).map((r) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button'; b.dataset.name = r.name;
+      if (shown.has(r.name)) b.className = 'on';
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = r.name;
+      const n = document.createElement('span'); n.className = 'n'; n.textContent = fmtInt(r.n);
+      b.title = `${r.name}: ${fmtInt(r.n)} ${SEX_WORD[sex]} in ${y}, ${fmtRate(r.rate)} per 1,000`;
+      b.append(nm, n); li.append(b);
+      return li;
+    }));
+  }
+  const f = topOfYear(T, META, 'F', y)[0], m = topOfYear(T, META, 'M', y)[0];
+  $('yrnote').textContent = f && m
+    ? `Babies given each name in ${y}. The #1s went to ${fmtRate(f.rate)} of every 1,000 girls and ${fmtRate(m.rate)} of every 1,000 boys born that year. Tap a name to chart it.`
+    : '';
+}
+function setupYears(open) {
+  const sel = $('yr');
+  for (let y = META.y1; y >= META.y0; y--) sel.append(new Option(String(y), String(y)));
+  sel.addEventListener('change', () => drawYear(+sel.value));
+  for (const b of document.querySelectorAll('#yrs .step')) b.addEventListener('click', () => { const y = yearIn(state.year + +b.dataset.d, META); if (y) drawYear(y); });
+  $('yrs').addEventListener('toggle', () => {
+    if ($('yrs').open) drawYear(state.year || META.y1);
+    else { state.year = null; history.replaceState(null, '', location.pathname + encodeState(state)); }
+  });
+  $('yrs').addEventListener('click', async (e) => {
+    const name = e.target.closest('button[data-name]')?.dataset.name;
+    if (!name) return;
+    await show([name]);
+    if (state.year) drawYear(state.year); // mark the charted name
+    $('chart').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  if (open) { state.year = open; $('yrs').open = true; } // the toggle event draws it
+}
+
 function presetRow(label, groups) {
   const li = document.createElement('li');
   const b = document.createElement('b'); b.textContent = label;
@@ -415,7 +466,7 @@ function presetRow(label, groups) {
     const x = document.createElement('li');
     const btn = document.createElement('button');
     btn.type = 'button'; btn.textContent = g.label || g.names.join(' · ');
-    btn.addEventListener('click', () => show(g.names));
+    btn.addEventListener('click', g.go || (() => show(g.names)));
     x.append(btn); ul.append(x);
   }
 }
@@ -424,7 +475,10 @@ async function main() {
   try { META = await (await fetch('data/meta.json')).json(); }
   catch { setStatus('Could not load the data. Try reloading.', true); return; }
   $('span').textContent = `${META.y0}–${META.y1}`;
-  presetRow(`Top of ${META.y1}:`, [{ names: [META.top.F[0], META.top.M[0]] }]);
+  presetRow(`Top of ${META.y1}:`, [{ names: [META.top.F[0], META.top.M[0]] }, { label: 'Any year…', go: async () => {
+    // drawn before the scroll: an empty panel left the page too short to bring it to the top
+    $('yrs').open = true; await drawYear(state.year || META.y1); $('yrs').scrollIntoView({ behavior: 'smooth', block: 'start' }); $('yr').focus({ preventScroll: true });
+  } }]);
   presetRow('Rising fastest:', [{ names: [META.rising.F[0][0], META.rising.M[0][0]] }]);
   presetRow('Try:', [{ names: ['Linda', 'Jennifer', 'Ashley'] }, { names: ['Jordan'] }, { names: ['Mary'] }, { names: ['Hillary'] }]);
   for (const b of $('units').querySelectorAll('button')) {
@@ -462,10 +516,11 @@ async function main() {
   let lastW = innerWidth;
   addEventListener('resize', () => { if (innerWidth !== lastW) { lastW = innerWidth; draw(); } });
   const s = decodeState(location.search);
+  setupYears(yearIn(s.year, META));
   state.unit = s.unit;
   setCmp(s.cmp);
   for (const o of $('units').querySelectorAll('button')) o.setAttribute('aria-pressed', String(o.dataset.u === s.unit));
-  await show(s.names.length ? s.names : [META.top.F[0], META.top.M[0]], { push: s.names.length > 0 || !!s.cmp });
+  await show(s.names.length ? s.names : [META.top.F[0], META.top.M[0]], { push: s.names.length > 0 || !!s.cmp || !!state.year });
 }
 
 main();
