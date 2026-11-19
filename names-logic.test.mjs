@@ -557,5 +557,50 @@ ok('the biggest shard stays under 1 MB', Math.max(...files.map((f) => readFileSy
   ok('1950\'s #1 girl is a bigger share than 2025\'s', (top('F', 1950)[0]?.rate ?? 0) > 2 * (top('F', M.y1)[0]?.rate ?? Infinity), JSON.stringify([top('F', 1950)[0], top('F', M.y1)[0]]));
 }
 
+// --- chartLabel, stackLabels, topOfYear, yearIn ----------------------------------------
+// Added 2026-11-18. mutwatch reported all four as "sweep never reaches", with eight
+// surviving mutants between them: every case below names the mutation it is aimed at, so
+// a later edit that makes one redundant can be recognised as such.
+
+const JF = { name: 'Jordan', sex: 'F', both: true };   // two lines, so the sex is shown
+const JP = { name: 'Jordan', sex: 'F', both: false };  // one line, no sex at all
+eq('chartLabel keeps the spelt-out sex when it fits', L.chartLabel(JF, 20), 'Jordan (girls)');
+eq('chartLabel falls back to the sex sign before cutting the name', L.chartLabel(JF, 10), 'Jordan ♀︎');
+eq('chartLabel shortens the tag before the name', L.chartLabel(JP, 9, ' England', ' UK'), 'Jordan UK');
+// kills L125 `width(t) <= cap` -> `<`: a label exactly cap wide still fits
+eq('chartLabel accepts a label exactly cap wide', L.chartLabel(JP, 6), 'Jordan');
+eq('chartLabel cuts the name one character over cap', L.chartLabel(JP, 5), 'Jord…');
+// kills L128 `Math.max(1, ...)` -> `Math.max(2, ...)`: one letter survives an absurd cap
+eq('chartLabel keeps one letter at an absurd cap', L.chartLabel(JP, 2), 'J…');
+
+eq('stackLabels leaves labels that already clear the gap alone', L.stackLabels([0, 20, 40], 10), [0, 20, 40]);
+eq('stackLabels merges an overlapping pair and centres the block on both lines', L.stackLabels([0, 5], 10), [-2.5, 7.5]);
+eq('stackLabels merges three crowded labels into one evenly spaced block', L.stackLabels([0, 1, 2], 10), [-9, 1, 11]);
+eq('stackLabels clamps a merged block inside [lo, hi]', L.stackLabels([0, 5], 10, 0, 100), [0, 10]);
+// kills L150 `cur.top + 1e-9` -> `- 1e-9` AND `1e-9` -> `1e-10`. The epsilon exists so that
+// labels a float-rounding hair apart count as touching rather than overlapping. A 5e-10
+// overlap is inside the tolerance, so the pair must NOT merge; either mutant shrinks the
+// window past 5e-10 and merges it, moving both labels.
+const touch = L.stackLabels([0, 10 - 5e-10], 10);
+ok('stackLabels treats a 5e-10 overlap as touching, not overlapping',
+   touch[0] === 0 && touch[1] === 10 - 5e-10, JSON.stringify(touch));
+
+const TT = { y0: 1990, F: [['Ann', 10, 'Bea', 6]], M: [['Cal', 8]] };
+const MM = { y0: 1990, y1: 1991, tot: { F: [2000], M: [0] } };
+eq('topOfYear rates each name per 1,000 babies of that sex', L.topOfYear(TT, MM, 'F', 1990),
+   [{ name: 'Ann', n: 10, rate: 5 }, { name: 'Bea', n: 6, rate: 3 }]);
+// kills L217 `tot ? ... : 0` -> `: 1`: no babies recorded means rate 0, not rate 1
+eq('topOfYear reports rate 0 when that year has no total', L.topOfYear(TT, MM, 'M', 1990),
+   [{ name: 'Cal', n: 8, rate: 0 }]);
+// kills L217 `i + 1 < row.length` -> `<=`: a trailing name with no count is not a pair
+eq('topOfYear ignores an unpaired trailing name', L.topOfYear({ y0: 1990, F: [['Ann', 10, 'Bob']] }, MM, 'F', 1990),
+   [{ name: 'Ann', n: 10, rate: 5 }]);
+eq('topOfYear of a year with no row is empty', L.topOfYear(TT, MM, 'F', 1991), []);
+eq('topOfYear of a missing table is empty', L.topOfYear(undefined, MM, 'F', 1990), []);
+
+eq('yearIn passes both ends of the range', [L.yearIn(1990, MM), L.yearIn(1991, MM)], [1990, 1991]);
+eq('yearIn rejects a year just outside either end', [L.yearIn(1989, MM), L.yearIn(1992, MM)], [null, null]);
+eq('yearIn rejects a non-integer year', [L.yearIn(1990.5, MM), L.yearIn(NaN, MM)], [null, null]);
+
 console.log(`${fail ? 'FAILED' : 'ok'}: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
