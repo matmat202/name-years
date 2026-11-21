@@ -581,6 +581,36 @@ ok('the biggest shard stays under 1 MB', Math.max(...files.map((f) => readFileSy
   eq('tipSpot: lines alone never send the box below',
     L.tipSpot({ ...base, px: 200, below: 230, dots: [], pts: [{ x: 100, y: 30 }, { x: 300, y: 30 }, { x: 100, y: 170 }, { x: 300, y: 170 }] }), { left: 212, top: 8 });
   eq('tipSpot: a box taller than the plot stays at the top', L.tipSpot({ ...base, th: 300, px: 100, dots: [{ x: 150, y: 280 }, { x: 50, y: 280 }] }), { left: 112, top: 8 });
+  // Added 2026-11-21. tipSpot was the module's last "sweep never reaches" name, so all nine of
+  // its surviving mutants read `same` without having been judged; with the sweep extended, eight
+  // of the nine DIFFER. Each case below names the mutation it kills, so a later edit that makes
+  // one redundant can be recognised as such. (The ninth, the `pts.length + 1` dot weight, is a
+  // true equivalent: one dot already outweighs every line point at any multiplier above
+  // pts.length, so neither the winning corner nor the `> pts.length` test can change.)
+  // A point exactly on a box's edge is inside it — three comparisons, three boundaries.
+  eq('tipSpot: a dot exactly on a box\'s left edge counts as hidden (p.x >= l)',
+    L.tipSpot({ ...base, px: 100, dots: [{ x: 112, y: 30 }] }), { left: 0, top: 8 });
+  eq('tipSpot: a dot exactly on a box\'s top edge counts as hidden (p.y >= t)',
+    L.tipSpot({ ...base, px: 100, dots: [{ x: 150, y: 8 }] }), { left: 0, top: 8 });
+  eq('tipSpot: a dot exactly on a box\'s bottom edge counts as hidden (p.y <= t + th)',
+    L.tipSpot({ ...base, px: 100, dots: [{ x: 150, y: 58 }] }), { left: 0, top: 8 });
+  // gap is read from the default when the caller omits it
+  eq('tipSpot: the default gap is 12 px',
+    L.tipSpot({ tw: 100, th: 50, w: 400, top: 8, bottom: 200, px: 100, dots: [], pts: [] }), { left: 112, top: 8 });
+  // past the middle the fallback corner is px + gap (to the right), not px - gap
+  eq('tipSpot: past the middle, a dot in the left box sends it right of the crosshair',
+    L.tipSpot({ ...base, px: 300, dots: [{ x: 200, y: 30 }] }), { left: 300, top: 8 });
+  // the below test is strict: a cost of exactly pts.length is line points only, so it stays put
+  eq('tipSpot: a cost of exactly pts.length is lines alone and keeps the box beside the crosshair',
+    L.tipSpot({ ...base, tw: 380, th: 150, px: 200, below: 230, dots: [], pts: [{ x: 100, y: 100 }, { x: 200, y: 120 }] }),
+    { left: 20, top: 8 });
+  // the below box is centred on the crosshair and clamped into the plot at both ends
+  eq('tipSpot: the box below is clamped to the left edge, not pushed off it',
+    L.tipSpot({ ...base, tw: 180, th: 90, px: 20, below: 230, dots: [{ x: 100, y: 50 }, { x: 100, y: 150 }] }),
+    { left: 0, top: 230 });
+  eq('tipSpot: the box below is clamped to w - tw at the right edge',
+    L.tipSpot({ ...base, tw: 180, th: 90, px: 390, below: 230, dots: [{ x: 250, y: 50 }, { x: 250, y: 150 }] }),
+    { left: 220, top: 230 });
 }
 
 // --- chartLabel, stackLabels, topOfYear, yearIn ----------------------------------------
