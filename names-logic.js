@@ -157,6 +157,30 @@ export function stackLabels(ys, gap, lo = -Infinity, hi = Infinity) {
   return out;
 }
 
+// Where the hover box goes. It sat at the top of the chart, which is where the tallest line
+// always peaks (the axis is scaled to it), so tapping a year near a peak on a phone hid the very
+// lines the box was describing (?n=Jordan,Taylor, tap 1988: Taylor's 1993 peak under it). Now
+// it takes whichever corner beside the crosshair covers least: a hovered dot costs as much as
+// every line point together, so the year's own values are never hidden when a corner can avoid
+// it. Ties keep the old place: away from the nearer edge, at the top. On a phone the box is
+// most of the plot's width and half its height, so at a peak year all four corners hide a dot
+// (1993, Jordan, Taylor at 390); then it goes to `below`, under the chart over its caption,
+// which costs more than hiding any amount of line and less than hiding one dot. All in box
+// pixels; `dots` are the hovered year's points, `pts` every drawn vertex. Returns { left, top }.
+export function tipSpot({ tw, th, px, w, dots, pts, top, bottom, below = null, gap = 12 }) {
+  const xs = px > w / 2 ? [px - gap - tw, px + gap] : [px + gap, px - gap - tw];
+  const ys = [top, Math.max(top, bottom - th)];
+  const inside = (l, t) => (p) => p.x >= l && p.x <= l + tw && p.y >= t && p.y <= t + th;
+  let best = null;
+  for (const y of ys) for (const x0 of xs) {
+    const l = Math.max(0, Math.min(w - tw, x0));
+    const cost = dots.filter(inside(l, y)).length * (pts.length + 1) + pts.filter(inside(l, y)).length;
+    if (!best || cost < best.cost) best = { cost, left: l, top: y };
+  }
+  if (below != null && best.cost > pts.length) return { left: Math.max(0, Math.min(w - tw, px - tw / 2)), top: below };  // centred: nothing beside it to dodge
+  return { left: best.left, top: best.top };
+}
+
 export function niceTicks(max) {
   if (!(max > 0)) return [0, 1];
   const raw = max / 4;

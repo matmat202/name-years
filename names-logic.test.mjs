@@ -557,6 +557,32 @@ ok('the biggest shard stays under 1 MB', Math.max(...files.map((f) => readFileSy
   ok('1950\'s #1 girl is a bigger share than 2025\'s', (top('F', 1950)[0]?.rate ?? 0) > 2 * (top('F', M.y1)[0]?.rate ?? Infinity), JSON.stringify([top('F', 1950)[0], top('F', M.y1)[0]]));
 }
 
+// --- tipSpot: the hover box takes the corner that hides least ---------------------------
+{
+  const base = { tw: 100, th: 50, w: 400, top: 8, bottom: 200, gap: 12, pts: [] };
+  eq('tipSpot: nothing to hide keeps the old place, right of a crosshair on the left, at the top',
+    L.tipSpot({ ...base, px: 100, dots: [] }), { left: 112, top: 8 });
+  eq('tipSpot: past the middle it opens to the left', L.tipSpot({ ...base, px: 300, dots: [] }), { left: 188, top: 8 });
+  // the hovered dot is at its peak, top right of the crosshair's preferred side: the box drops
+  eq('tipSpot: a dot under the top box sends it to the bottom',
+    L.tipSpot({ ...base, px: 100, dots: [{ x: 100, y: 20 }, { x: 100, y: 190 }], pts: [{ x: 150, y: 30 }] }), { left: 112, top: 150 });
+  // dot clear of both boxes (it sits on the crosshair, the box is 12 px aside), a peak beside
+  eq('tipSpot: a line peak beside the crosshair sends the box to the other side',
+    L.tipSpot({ ...base, px: 100, dots: [], pts: [{ x: 150, y: 30 }, { x: 160, y: 170 }] }), { left: 0, top: 8 });
+  eq('tipSpot: one hovered dot outweighs every line point',
+    L.tipSpot({ ...base, px: 100, w: 220, tw: 200, dots: [{ x: 100, y: 20 }],
+      pts: Array.from({ length: 9 }, (_, i) => ({ x: 20 + 20 * i, y: 180 })) }), { left: 20, top: 150 });
+  eq('tipSpot: clamped inside the box at both edges',
+    [L.tipSpot({ ...base, px: 395, dots: [] }).left, L.tipSpot({ ...base, px: 5, dots: [] }).left], [283, 17]);
+  // the phone case: a box nearly the plot's size, a dot in every corner it could take
+  const crowded = { ...base, tw: 180, th: 90, px: 200, dots: [{ x: 120, y: 30 }, { x: 290, y: 30 }, { x: 120, y: 170 }, { x: 290, y: 170 }] };
+  eq('tipSpot: a dot in every corner sends the box below the chart', L.tipSpot({ ...crowded, below: 230 }), { left: 110, top: 230 });
+  eq('tipSpot: without a below, the corner hiding fewest dots', L.tipSpot({ ...crowded, dots: crowded.dots.slice(1) }), { left: 8, top: 8 });
+  eq('tipSpot: lines alone never send the box below',
+    L.tipSpot({ ...base, px: 200, below: 230, dots: [], pts: [{ x: 100, y: 30 }, { x: 300, y: 30 }, { x: 100, y: 170 }, { x: 300, y: 170 }] }), { left: 212, top: 8 });
+  eq('tipSpot: a box taller than the plot stays at the top', L.tipSpot({ ...base, th: 300, px: 100, dots: [{ x: 150, y: 280 }, { x: 50, y: 280 }] }), { left: 112, top: 8 });
+}
+
 // --- chartLabel, stackLabels, topOfYear, yearIn ----------------------------------------
 // Added 2026-11-18. mutwatch reported all four as "sweep never reaches", with eight
 // surviving mutants between them: every case below names the mutation it is aimed at, so

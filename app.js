@@ -1,6 +1,6 @@
 import {
   MAX_SERIES, shardKey, parseNames, lookup, prefixMatches, totalOf, seriesFor, seriesLabel, chartLabel,
-  peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, stackLabels, encodeState, decodeState, yearIn, topOfYear, SEX_WORD, abroadFor, spellNote, COUNTRIES,
+  peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, stackLabels, tipSpot, encodeState, decodeState, yearIn, topOfYear, SEX_WORD, abroadFor, spellNote, COUNTRIES,
   TILES, STATE_NAMES, BAND_LABELS, WITHHELD_MAX, whereRows, tileBand, extremes, fmtRatio,
 } from './names-logic.js';
 
@@ -126,8 +126,10 @@ function draw() {
   svg.append(ax);
 
   const labels = [];
+  const verts = [];  // every drawn point, so the hover box can find a corner that hides fewest
   for (const s of current) {
     const v = vals(s);
+    v.forEach((val, i) => verts.push({ x: x(i), y: y(val) }));
     let d = '';
     v.forEach((val, i) => { d += `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(val).toFixed(1)}`; });
     svg.append(el('path', { d, class: 'ln', stroke: COLORS[s.slot] }));
@@ -139,6 +141,7 @@ function draw() {
     v.forEach((val, i) => {
       if (val == null) { pen = false; return; }
       d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(val).toFixed(1)}`; pen = true; lastI = i;
+      verts.push({ x: x(i), y: y(val) });
     });
     svg.append(el('path', { d, class: 'ln fr', stroke: COLORS[s.slot] }));
     if (lastI >= 0) labels.push({ s, fr: true, y: y(v[lastI]) });
@@ -187,8 +190,11 @@ function draw() {
     const rect = box.getBoundingClientRect();
     const px = (x(i) / W) * rect.width;
     tip.classList.add('on');
-    const tw = tip.offsetWidth;
-    tip.style.left = `${Math.max(0, Math.min(rect.width - tw, px + (px > rect.width / 2 ? -tw - 12 : 12)))}px`;
+    const k = rect.width / W;  // 1 SVG unit = 1 CSS px, unless the box was resized since drawing
+    const spot = tipSpot({ tw: tip.offsetWidth, th: tip.offsetHeight, px, w: rect.width, top: 8, bottom: (M.t + ih) * k, below: H * k + 4,
+      dots: pts.map((p) => ({ x: px, y: y(p.v) * k })), pts: verts.map((p) => ({ x: p.x * k, y: p.y * k })) });
+    tip.style.left = `${spot.left}px`;
+    tip.style.top = `${spot.top}px`;
   };
   const at = (e) => {
     const r = svg.getBoundingClientRect();
