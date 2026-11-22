@@ -109,7 +109,7 @@ export function seriesFor(name, rec, meta) {
   return per.filter((s) => s.total > 0 && s.total >= MIN_SEX_SHARE * all)
     .sort((a, b) => b.total - a.total || (a.sex < b.sex ? -1 : 1))
     .map((s) => ({ name, sex: s.sex, counts: s.counts, total: s.total, rate: perThousand(s.counts, meta.tot[s.sex]),
-      rank: rec['r' + s.sex] || [0, 0, 0], both: per.every((p) => p.total > 0 && p.total >= MIN_SEX_SHARE * all) }));
+      rank: rec['r' + s.sex] || [0, 0, 0], spell: rec['v' + s.sex] || [], both: per.every((p) => p.total > 0 && p.total >= MIN_SEX_SHARE * all) }));
 }
 
 export const seriesLabel = (s) => (s.both ? `${s.name} (${SEX_WORD[s.sex]})` : s.name);
@@ -336,4 +336,11 @@ export function abroadFor(rec, sex, meta, key) {
 // "Léo, Leo" when the French spellings are not just the name itself; '' otherwise.
 export function spellNote(name, spell) {
   return spell.length && !(spell.length === 1 && spell[0] === name) ? spell.join(', ') : '';
+}
+
+// The similar spellings a card offers (build.py spell_key, same sex, largest first), minus
+// any already on the chart: tapping one adds it, so a charted one would be a dead button.
+export function otherSpellings(spell, shown, k = 3) {
+  const on = new Set(shown.map((n) => n.toLowerCase()));
+  return (spell || []).filter(([n]) => !on.has(n.toLowerCase())).slice(0, k).map(([name, n]) => ({ name, n }));
 }

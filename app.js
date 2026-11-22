@@ -1,6 +1,6 @@
 import {
   MAX_SERIES, shardKey, parseNames, lookup, prefixMatches, totalOf, seriesFor, seriesLabel, chartLabel,
-  peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, stackLabels, tipSpot, encodeState, decodeState, yearIn, topOfYear, SEX_WORD, abroadFor, spellNote, COUNTRIES,
+  peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, stackLabels, tipSpot, encodeState, decodeState, yearIn, topOfYear, SEX_WORD, abroadFor, spellNote, otherSpellings, COUNTRIES,
   TILES, STATE_NAMES, BAND_LABELS, WITHHELD_MAX, whereRows, tileBand, extremes, fmtRatio,
 } from './names-logic.js';
 
@@ -256,6 +256,21 @@ function drawFacts() {
         ['Least common in', list(x.least, (r) => (r.w ? `at most ${fmtRatio(r.hi)}` : fmtRatio(r.ratio)))]);
     }
     fillDl(dl, rows);
+    const alt = otherSpellings(s.spell, state.names);
+    if (alt.length) {
+      const dt = document.createElement('dt'); dt.textContent = 'Similar spellings';
+      const dd = document.createElement('dd'); dd.className = 'alt';
+      for (const a of alt) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.dataset.name = a.name; b.dataset.from = s.name;
+        const nm = document.createElement('span'); nm.textContent = a.name;
+        const n = document.createElement('span'); n.className = 'n'; n.textContent = fmtInt(a.n);
+        b.append(nm, ' ', n);
+        b.title = `Add ${a.name} to the chart: ${fmtInt(a.n)} ${SEX_WORD[s.sex]} since ${META.y0}`;
+        dd.append(b);
+      }
+      dl.append(dt, dd);
+    }
     const det = document.createElement('details');
     det.className = 'more';
     det.open = moreOpen ?? !NARROW.matches;
@@ -518,6 +533,14 @@ async function main() {
   q.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== q) closeOpts(); }, 150));
   $('opts').addEventListener('mousedown', (e) => e.preventDefault());
   $('opts').addEventListener('click', (e) => { const i = e.target.closest('li[data-i]')?.dataset.i; if (i != null) pickOpt(+i); });
+  // A similar spelling joins the chart; on a full chart it is drawn beside its own card's name
+  // alone, since a fifth line would be dropped and the tap would seem to do nothing.
+  $('facts').addEventListener('click', (e) => {
+    const b = e.target.closest('dd.alt button');
+    if (!b) return;
+    show(current.length >= MAX_SERIES ? [b.dataset.from, b.dataset.name] : [...state.names, b.dataset.name]);
+    $('chart').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   $('form').addEventListener('submit', (e) => { e.preventDefault(); show(parseNames(q.value)); });
   let lastW = innerWidth;
   addEventListener('resize', () => { if (innerWidth !== lastW) { lastW = innerWidth; draw(); } });

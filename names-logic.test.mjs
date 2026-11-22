@@ -296,6 +296,41 @@ eq('covers 1880 to 2025', [M.y0, M.y1], [1880, 2025]);
   eq('series count', series, M.counts.series);
   eq('no name in the wrong shard', misfiled, 0);
 }
+{
+  // Similar spellings ("vF"/"vM", build.py spell_key): each one offered is a real name of that
+  // sex whose own record holds exactly the count shown, the list is largest first and capped,
+  // and the link runs both ways (A offers B only if B's own list would offer A, unless capped).
+  let bad = [], lists = 0;
+  const totalSex = (n, sex) => { const r = S[L.shardKey(n)]?.[n]; return r && r[sex] ? r[sex].slice(1).reduce((a, b) => a + b, 0) : null; };
+  for (const sh of Object.values(S)) for (const [n, rec] of Object.entries(sh)) for (const sex of ['F', 'M']) {
+    const v = rec['v' + sex];
+    if (!v) continue;
+    lists++;
+    if (!rec[sex]) bad.push(`${n} ${sex}: a list without a line`);
+    if (v.length > 4) bad.push(`${n} ${sex}: ${v.length} spellings`);
+    v.forEach(([m, c], i) => {
+      if (m === n) bad.push(`${n} ${sex}: lists itself`);
+      if (totalSex(m, sex) !== c) bad.push(`${n} ${sex}: ${m} shown as ${c}, its record says ${totalSex(m, sex)}`);
+      if (c < 100) bad.push(`${n} ${sex}: ${m} under the floor`);
+      if (i && v[i - 1][1] < c) bad.push(`${n} ${sex}: not largest first at ${m}`);
+      const back = S[L.shardKey(m)]?.[m]?.['v' + sex];
+      if (!back || (back.length < 4 && !back.some(([x]) => x === n))) bad.push(`${n} ${sex}: ${m} does not list it back`);
+    });
+  }
+  ok('every similar spelling is a real line of that sex, with its own count, largest first, both ways', !bad.length, bad.slice(0, 3).join('; '));
+  ok('thousands of names offer a similar spelling', lists > 5000, String(lists));
+  const sp = (n, sex) => (get(n)?.['v' + sex] || []).map(([m]) => m);
+  // counts off the yob files: unzip -p data/names.zip 'yob*.txt' | grep '^Jordyn,F,' | awk -F, '{s+=$3} END{print s}'
+  eq('Jordan (girls) offers Jordyn first, 62,171 girls since 1880', get('Jordan').vF[0], ['Jordyn', 62171]);
+  eq('John offers Jon, 168,142 boys since 1880', get('John').vM, [['Jon', 168142]]);
+  ok('Catherine offers Katherine', sp('Catherine', 'F').includes('Katherine'));
+  ok('Aiden offers Aidan and Ayden', ['Aidan', 'Ayden'].every((m) => sp('Aiden', 'M').includes(m)), sp('Aiden', 'M').join());
+  ok('Sarah offers Sara', sp('Sarah', 'F').includes('Sara'));
+  // the key is conservative on purpose: these are different names, not spellings of one
+  for (const [a, b, sex] of [['John', 'Jan', 'M'], ['Mary', 'Marie', 'F'], ['Maria', 'Mariah', 'F'], ['Joan', 'Joann', 'F'], ['Kaylee', 'Kayle', 'F'], ['Dan', 'Don', 'M'], ['Ian', 'Yan', 'M']])
+    ok(`${a} does not offer ${b}`, !sp(a, sex).includes(b) && !sp(b, sex).includes(a));
+  eq('a name with no similar spelling has no list', get('Luke').vM, undefined);
+}
 // Facts read off the SSA's own yob files (unzip -p data/names.zip yob1990.txt | grep ...).
 eq('Matthew, boys, 1990: 44,826', L.yearly(get('Matthew').M, M.y0, M.y1)[1990 - M.y0], 44826);
 eq('Olivia, girls, 2025: 13,544', L.yearly(get('Olivia').F, M.y0, M.y1)[2025 - M.y0], 13544);
@@ -640,6 +675,14 @@ eq('stackLabels clamps a merged block inside [lo, hi]', L.stackLabels([0, 5], 10
 const touch = L.stackLabels([0, 10 - 5e-10], 10);
 ok('stackLabels treats a 5e-10 overlap as touching, not overlapping',
    touch[0] === 0 && touch[1] === 10 - 5e-10, JSON.stringify(touch));
+
+const SP = [['Jordyn', 62171], ['Jordin', 4413], ['Jorden', 2335], ['Jordon', 1846]];
+eq('otherSpellings offers the largest three', L.otherSpellings(SP, ['Jordan']).map((a) => a.name), ['Jordyn', 'Jordin', 'Jorden']);
+eq('otherSpellings leaves out one already charted, whatever its case', L.otherSpellings(SP, ['Jordan', 'jordin']),
+   [{ name: 'Jordyn', n: 62171 }, { name: 'Jorden', n: 2335 }, { name: 'Jordon', n: 1846 }]);
+eq('otherSpellings of no list is empty', [L.otherSpellings(undefined, []), L.otherSpellings([], ['Jo'])], [[], []]);
+eq('seriesFor carries the sex\'s spellings onto its line', L.seriesFor('Jordan', { ...shard.Jordan, vF: SP.slice(0, 1) }, meta).map((s) => [s.sex, s.spell]),
+   [['M', []], ['F', [['Jordyn', 62171]]]]);
 
 const TT = { y0: 1990, F: [['Ann', 10, 'Bea', 6]], M: [['Cal', 8]] };
 const MM = { y0: 1990, y1: 1991, tot: { F: [2000], M: [0] } };
