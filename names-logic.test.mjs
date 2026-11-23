@@ -684,6 +684,22 @@ eq('otherSpellings of no list is empty', [L.otherSpellings(undefined, []), L.oth
 eq('seriesFor carries the sex\'s spellings onto its line', L.seriesFor('Jordan', { ...shard.Jordan, vF: SP.slice(0, 1) }, meta).map((s) => [s.sex, s.spell]),
    [['M', []], ['F', [['Jordyn', 62171]]]]);
 
+{
+  // together(): a line with its similar spellings added, year by year (meta: 1988-1993).
+  const jo = L.seriesFor('Jordan', shard.Jordan, meta).find((s) => s.sex === 'M');
+  const recs = [['Jordyn', { M: [1990, 5, 7], F: [1989, 100] }], ['Jorden', { M: [1993, 2] }], ['Jordon', { F: [1990, 9] }], ['Gone', undefined]];
+  const t = L.together(jo, recs, meta);
+  eq('together adds each spelling of the same sex in its own years', t.counts, jo.counts.map((c, i) => c + [0, 0, 5, 7, 0, 2][i]));
+  eq('together names only the spellings it added (no M Jordon, no missing record)', t.names, ['Jordyn', 'Jorden']);
+  eq('together totals its own counts', t.total, t.counts.reduce((a, b) => a + b, 0));
+  eq('together rates per 1,000 of the sex, year by year', t.rate, L.perThousand(t.counts, meta.tot.M));
+  eq('together leaves the line itself untouched', jo.counts, L.seriesFor('Jordan', shard.Jordan, meta).find((s) => s.sex === 'M').counts);
+  eq('together does not add the name to itself, whatever its case', L.together(jo, [['JORDAN', shard.Jordan]], meta), null);
+  eq('together of no spellings is null', [L.together(jo, [], meta), L.together(jo, undefined, meta)], [null, null]);
+  eq('c=sp round-trips through the URL', L.decodeState(L.encodeState({ names: ['Jordan'], unit: 'rate', cmp: 'sp' })).cmp, 'sp');
+  eq('an unknown c= is no dashed line', L.decodeState('?n=Jo&c=zz').cmp, '');
+}
+
 const TT = { y0: 1990, F: [['Ann', 10, 'Bea', 6]], M: [['Cal', 8]] };
 const MM = { y0: 1990, y1: 1991, tot: { F: [2000], M: [0] } };
 eq('topOfYear rates each name per 1,000 babies of that sex', L.topOfYear(TT, MM, 'F', 1990),
@@ -700,6 +716,14 @@ eq('topOfYear of a missing table is empty', L.topOfYear(undefined, MM, 'F', 1990
 eq('yearIn passes both ends of the range', [L.yearIn(1990, MM), L.yearIn(1991, MM)], [1990, 1991]);
 eq('yearIn rejects a year just outside either end', [L.yearIn(1989, MM), L.yearIn(1992, MM)], [null, null]);
 eq('yearIn rejects a non-integer year', [L.yearIn(1990.5, MM), L.yearIn(NaN, MM)], [null, null]);
+
+{
+  // The real Kaitlyn: her card's spellings summed in 2000 equal the yob2000.txt rows
+  // Kaitlyn 8,759 + Caitlin 4,102 + Caitlyn 2,835 + Kaitlin 2,136 + Kaytlin 187.
+  const k = L.seriesFor('Kaitlyn', get('Kaitlyn'), M).find((s) => s.sex === 'F');
+  const t = L.together(k, k.spell.map(([n]) => [n, get(n)]), M);
+  eq('Kaitlyn with her spellings in 2000, off the raw file', [t.names, t.counts[2000 - M.y0]], [['Caitlin', 'Kaitlin', 'Caitlyn', 'Kaytlin'], 18019]);
+}
 
 console.log(`${fail ? 'FAILED' : 'ok'}: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

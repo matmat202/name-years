@@ -207,13 +207,15 @@ export const rankLabel = (r) => (r > 0 ? `#${fmtInt(r)}` : 'unranked');
 
 // ?n=Olivia,Emma&u=n&c=ew (c: the country whose lines are drawn beside the US ones; f=1 is
 // France's older spelling and still read). Unknown values fall back rather than throw.
+// c=sp draws each name with its similar spellings added, in place of a country's line.
 export const COUNTRIES = ['fr', 'ew'];
+export const DASHED = [...COUNTRIES, 'sp'];
 export function encodeState({ names, unit, cmp, year }) {
   const p = new URLSearchParams();
   if (names && names.length) p.set('n', names.join(','));
   if (unit === 'n') p.set('u', 'n');
   if (cmp === 'fr') p.set('f', '1');
-  else if (COUNTRIES.includes(cmp)) p.set('c', cmp);
+  else if (DASHED.includes(cmp)) p.set('c', cmp);
   if (year) p.set('y', String(year));
   const s = p.toString().replace(/%2C/g, ',');
   return s ? `?${s}` : '';
@@ -222,7 +224,7 @@ export function decodeState(search) {
   const p = new URLSearchParams(search);
   const c = p.get('c');
   return { names: parseNames((p.get('n') || '').slice(0, 120)), unit: p.get('u') === 'n' ? 'n' : 'rate',
-    cmp: COUNTRIES.includes(c) ? c : p.get('f') === '1' ? 'fr' : '',
+    cmp: DASHED.includes(c) ? c : p.get('f') === '1' ? 'fr' : '',
     year: /^\d{4}$/.test(p.get('y') || '') ? +p.get('y') : null };
 }
 
@@ -343,4 +345,20 @@ export function spellNote(name, spell) {
 export function otherSpellings(spell, shown, k = 3) {
   const on = new Set(shown.map((n) => n.toLowerCase()));
   return (spell || []).filter(([n]) => !on.has(n.toLowerCase())).slice(0, k).map(([name, n]) => ({ name, n }));
+}
+
+// A line's babies with its similar spellings' added, year by year: "how many Kaitlyns, however
+// it was spelled". `recs` is [[spelling, shard record], ...] for the card's list (s.spell, up to
+// build.py's SPELL_MAX); a spelling whose record is missing is left out and not named. Null
+// when no other spelling is found, so a name with none draws no second line. Same shape as
+// abroadFor's, over all the US years.
+export function together(s, recs, meta) {
+  const names = [], counts = s.counts.slice();
+  for (const [name, rec] of recs || []) {
+    if (!rec?.[s.sex] || name.toLowerCase() === s.name.toLowerCase()) continue;
+    yearly(rec[s.sex], meta.y0, meta.y1).forEach((c, i) => { counts[i] += c; });
+    names.push(name);
+  }
+  if (!names.length) return null;
+  return { counts, rate: perThousand(counts, meta.tot[s.sex]), total: counts.reduce((a, b) => a + b, 0), names };
 }

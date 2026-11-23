@@ -1,6 +1,6 @@
 import {
   MAX_SERIES, shardKey, parseNames, lookup, prefixMatches, totalOf, seriesFor, seriesLabel, chartLabel,
-  peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, stackLabels, tipSpot, encodeState, decodeState, yearIn, topOfYear, SEX_WORD, abroadFor, spellNote, otherSpellings, COUNTRIES,
+  peak, medianYear, living, fmtAbout, niceTicks, fmtInt, fmtRate, rankLabel, stackLabels, tipSpot, encodeState, decodeState, yearIn, topOfYear, SEX_WORD, abroadFor, spellNote, otherSpellings, together, COUNTRIES,
   TILES, STATE_NAMES, BAND_LABELS, WITHHELD_MAX, whereRows, tileBand, extremes, fmtRatio,
 } from './names-logic.js';
 
@@ -20,6 +20,8 @@ const ABROAD = {
   fr: { name: 'France', short: 'FR', label: 'France', dir: 'f', src: 'Insee', cache: new Map() },
   ew: { name: 'England and Wales', short: 'E&W', label: 'E&W', dir: 'e', src: 'ONS', cache: new Map() },
 };
+// The third dashed line is not a country: each name with its card's similar spellings added.
+const SPELL = { name: 'all spellings' };
 const state = { names: [], unit: 'rate', cmp: '', year: null };
 let current = []; // series, in slot order
 let runId = 0;
@@ -54,6 +56,18 @@ function shard(name, dir = 'n', cache = shards) {
 const stateShard = (name) => shard(name, 's', sshards).catch(() => undefined);
 const abroadShard = (name, c) => shard(name, ABROAD[c].dir, ABROAD[c].cache).catch(() => undefined); // likewise
 
+// Fetched only once "All spellings" is on: Kaitlyn's Caitlin lives in another 400 KB shard.
+// s.ab.sp is then the summed line, null if no spelling is found, undefined if a fetch failed.
+async function withSpellings(list) {
+  await Promise.all(list.filter((s) => !s.spTried).map(async (s) => {
+    try {
+      const recs = await Promise.all(s.spell.map(([n]) => shard(n).then((sh) => [n, sh && sh[lookup(sh, n)]])));
+      s.ab.sp = together(s, recs, META);
+    } catch { s.ab.sp = undefined; }
+    s.spTried = true;
+  }));
+}
+
 async function show(names, { push = true } = {}) {
   const id = ++runId;
   state.names = names;
@@ -81,6 +95,7 @@ async function show(names, { push = true } = {}) {
   state.names = found.map((g) => g.k);
   $('q').value = state.names.join(', ');
   if (push) history.replaceState(null, '', location.pathname + encodeState(state));
+  if (state.cmp === 'sp') { await withSpellings(current); if (id !== runId) return; }
   const msgs = [];
   if (missing.length) msgs.push(`${missing.join(', ')}: never given to five or more US babies of either sex in a year.`);
   if (series.length > MAX_SERIES) msgs.push(`Showing the first ${MAX_SERIES} lines; a name used for both sexes takes two.`);
@@ -93,7 +108,7 @@ const vals = (s) => (state.unit === 'n' ? s.counts : s.rate);
 const ab = (s) => s.ab[state.cmp];
 const frLines = () => (state.cmp ? current.filter((s) => ab(s)) : []);
 const frVals = (s) => (state.unit === 'n' ? ab(s).counts : ab(s).rate);
-const C = () => ABROAD[state.cmp];
+const C = () => (state.cmp === 'sp' ? SPELL : ABROAD[state.cmp]);
 const fmtVal = (v) => (state.unit === 'n' ? fmtInt(v) : fmtRate(v));
 
 function draw() {
@@ -113,7 +128,7 @@ function draw() {
   const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img',
     'aria-label': current.length
       ? `Line chart, ${state.unit === 'n' ? 'babies' : 'babies per 1,000 of the same sex'} named ${current.map(seriesLabel).join(', ')}, ${META.y0} to ${META.y1}`
-        + (frLines().length ? `, with dashed lines for ${C().name} from ${META[state.cmp].y0}` : '')
+        + (frLines().length ? (state.cmp === 'sp' ? ', with dashed lines for each name with its similar spellings added' : `, with dashed lines for ${C().name} from ${META[state.cmp].y0}`) : '')
       : 'Empty chart' });
   const ax = el('g', { class: 'ax' });
   for (const t of ticks) {
@@ -152,7 +167,9 @@ function draw() {
   const placed = stackLabels(labels.map((l) => l.y), 14, M.t, H - M.b);
   labels.forEach((l, i) => {
     const cap = narrow ? 11 : 15;
-    const t = l.fr ? chartLabel(l.s, cap, narrow ? ' ' + C().short : ' · ' + C().label, ' ' + C().short) : chartLabel(l.s, cap);
+    const plus = l.fr && state.cmp === 'sp' && ` +${ab(l.s).names.length}`; // "Kaitlyn +4": four spellings added
+    const t = !l.fr ? chartLabel(l.s, cap) : plus ? chartLabel(l.s, cap, plus)
+      : chartLabel(l.s, cap, narrow ? ' ' + C().short : ' · ' + C().label, ' ' + C().short);
     const ky = placed[i].toFixed(1);
     svg.append(el('path', { d: `M${W - M.r + 4},${ky}H${W - M.r + 12}`, class: l.fr ? 'key fr' : 'key', stroke: COLORS[l.s.slot] }));
     svg.append(el('text', { x: W - M.r + 15, y: placed[i] + 4, class: 'lab' }, t));
@@ -207,7 +224,9 @@ function draw() {
 
   $('yl').textContent = current.length
     ? (state.unit === 'n' ? 'Babies given the name each year.' : 'Babies given the name per 1,000 babies of the same sex born that year.')
-      + (frLines().length ? ` Dashed: ${C().name}, from ${META[state.cmp].y0}, ${state.unit === 'n' ? 'babies there' : `per 1,000 babies of the same sex in ${C().src}'s count`}.` : '')
+      + (!frLines().length ? '' : state.cmp === 'sp'
+        ? ` Dashed: each name with the similar spellings its card lists added in (the SSA counts each spelling apart).`
+        : ` Dashed: ${C().name}, from ${META[state.cmp].y0}, ${state.unit === 'n' ? 'babies there' : `per 1,000 babies of the same sex in ${C().src}'s count`}.`)
       + ' Hover or tap the chart for a year.'
     : '';
   drawFacts();
@@ -241,6 +260,7 @@ function drawFacts() {
       ['Half of those alive born by', lv.median == null ? '—' : `${lv.median}: they turn ${lv.age} in ${META.asof}`],
       ['Since 1880', `${fmtInt(s.total)} ${SEX_WORD[s.sex]}`],
     ];
+    if (state.cmp === 'sp') rows.push(['All spellings', spellRow(s)]);
     // Abroad and by state sit behind a disclosure: at 390 px they made each card ~710 px tall,
     // four of them 2,854 px, before the table. Open from the start where the cards sit side by side.
     const more = [];
@@ -284,6 +304,15 @@ function drawFacts() {
     li.append(h, dl, det);
     ul.append(li);
   }
+}
+
+// The card's summed line in words: "703,410 girls since 1880 with Caitlin, …; most popular 1997: …".
+function spellRow(s) {
+  const t = s.ab.sp, w = SEX_WORD[s.sex];
+  if (t === undefined) return 'could not load the other spellings';
+  if (!t) return `no similar spelling given to ${fmtInt(100)}+ ${w} since ${META.y0}`;
+  const p = peak(t.rate);
+  return `${fmtInt(t.total)} ${w} since ${META.y0} with ${t.names.join(', ')}; most popular ${META.y0 + p}: ${fmtRate(t.rate[p])} per 1,000 ${w}`;
 }
 
 function fillDl(dl, rows) {
@@ -513,9 +542,14 @@ async function main() {
   const cmpBtns = () => $('cmp').querySelectorAll('button');
   const setCmp = (c) => { state.cmp = c; for (const o of cmpBtns()) o.setAttribute('aria-pressed', String(o.dataset.c === c)); };
   for (const b of cmpBtns()) {
-    b.addEventListener('click', () => {
+    b.addEventListener('click', async () => {
       setCmp(state.cmp === b.dataset.c ? '' : b.dataset.c); // pressing the chosen one again turns it off
       history.replaceState(null, '', location.pathname + encodeState(state));
+      if (state.cmp === 'sp') {
+        const id = runId;
+        await withSpellings(current);
+        if (id !== runId) return; // a new search drew meanwhile, its own way
+      }
       draw();
     });
   }
