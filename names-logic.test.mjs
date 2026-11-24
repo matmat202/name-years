@@ -327,9 +327,14 @@ eq('covers 1880 to 2025', [M.y0, M.y1], [1880, 2025]);
   ok('Aiden offers Aidan and Ayden', ['Aidan', 'Ayden'].every((m) => sp('Aiden', 'M').includes(m)), sp('Aiden', 'M').join());
   ok('Sarah offers Sara', sp('Sarah', 'F').includes('Sara'));
   // the key is conservative on purpose: these are different names, not spellings of one
-  for (const [a, b, sex] of [['John', 'Jan', 'M'], ['Mary', 'Marie', 'F'], ['Maria', 'Mariah', 'F'], ['Joan', 'Joann', 'F'], ['Kaylee', 'Kayle', 'F'], ['Dan', 'Don', 'M'], ['Ian', 'Yan', 'M']])
+  for (const [a, b, sex] of [['John', 'Jan', 'M'], ['Mary', 'Marie', 'F'], ['Maria', 'Mariah', 'F'], ['Joan', 'Joann', 'F'], ['Kaylee', 'Kayle', 'F'], ['Dan', 'Don', 'M'], ['Ian', 'Yan', 'M'],
+    // build.py LONG_VOWEL: one consonant before the -ey says a different vowel
+    ['Casey', 'Cassie', 'F'], ['Haley', 'Hallie', 'F'], ['Willie', 'Wiley', 'M'], ['Millie', 'Miley', 'F'], ['Callie', 'Kaley', 'F'], ['Edie', 'Eddie', 'F']])
     ok(`${a} does not offer ${b}`, !sp(a, sex).includes(b) && !sp(b, sex).includes(a));
   eq('a name with no similar spelling has no list', get('Luke').vM, undefined);
+  // ...while the long ones keep each other, and the short ones theirs
+  for (const [a, b, sex] of [['Casey', 'Kasey', 'F'], ['Cassie', 'Kassie', 'F'], ['Haley', 'Halie', 'F'], ['Wiley', 'Wylie', 'M'], ['Lily', 'Lilly', 'F'], ['Vicki', 'Vikki', 'F']])
+    ok(`${a} offers ${b}`, sp(a, sex).includes(b), sp(a, sex).join());
 }
 // Facts read off the SSA's own yob files (unzip -p data/names.zip yob1990.txt | grep ...).
 eq('Matthew, boys, 1990: 44,826', L.yearly(get('Matthew').M, M.y0, M.y1)[1990 - M.y0], 44826);
